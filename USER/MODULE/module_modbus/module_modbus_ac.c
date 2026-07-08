@@ -1,6 +1,9 @@
 #include "module_modbus_ac.h"
 
 #include <stddef.h>
+#include <string.h>
+
+#include "modbus_tx_queue.h"
 
 typedef enum {
     AC_PARAM_VALUE_I16 = 0,
@@ -63,16 +66,6 @@ static const ac_status_parse_item_t s_ac_status_parse_table[] = {
     AC_STATUS_ITEM(AC_STATUS_HIGH_TEMP_ALARM,          high_temp_alarm,                  (1UL << 13)),
     AC_STATUS_ITEM(AC_STATUS_LOW_TEMP_ALARM,           low_temp_alarm,                   (1UL << 14)),
 };
-
-static bool ac_ref_to_pdu(uint16_t ref, uint16_t base_ref, uint16_t *out)
-{
-    if ((out == NULL) || (ref < base_ref)) {
-        return false;
-    }
-
-    *out = (uint16_t)(ref - base_ref);
-    return true;
-}
 
 static const ac_param_parse_item_t *module_modbus_ac_find_param_item(uint16_t reg)
 {
@@ -137,37 +130,121 @@ static void module_modbus_ac_apply_status_item(ac_status_t *out,
     out->marks.raw |= item->mark_mask;
 }
 
-bool module_modbus_ac_read_params(uint8_t addr, uint16_t start_ref,
-                                  uint16_t count)
+static bool module_modbus_ac_response_byte_count(module_modbus_poll_function_t function,
+                                                 uint16_t reg_count,
+                                                 uint8_t *byte_count)
 {
-    uint16_t start_pdu;
+    uint32_t bytes;
 
-    if ((count == 0U) || (count > AC_MAX_READ_REG_COUNT)) {
-        return false;
-    }
-    if (module_modbus_ac_param_range_hits_reserved(start_ref, count)) {
-        return false;
-    }
-    if (!ac_ref_to_pdu(start_ref, AC_PARAM_READ_BASE_REF, &start_pdu)) {
+    if ((byte_count == NULL) || (reg_count == 0U)) {
         return false;
     }
 
-    return module_modbus_send_read_regs(addr, start_pdu, count);
+    if (function == MODULE_MODBUS_POLL_READ_BITS) {
+        bytes = ((uint32_t)reg_count + 7U) / 8U;
+    } else {
+        bytes = (uint32_t)reg_count * 2U;
+    }
+
+    if ((bytes == 0U) || (bytes > 0xFFU) ||
+        ((bytes + 5U) > MODULE_MODBUS_RX_BUF_SIZE)) {
+        return false;
+    }
+
+    *byte_count = (uint8_t)bytes;
+    return true;
 }
 
-bool module_modbus_ac_read_status(uint8_t addr, uint16_t start_ref,
-                                  uint16_t count)
+static bool module_modbus_ac_enqueue_read(uint8_t addr,
+                                          module_modbus_poll_function_t function,
+                                          uint16_t start_reg,
+                                          uint16_t reg_count)
 {
-    uint16_t start_pdu;
+    uint8_t frame[MODBUS_RTU_REQUEST_LEN];
+    uint8_t expect_byte_count;
+    modbus_response_expect_t waiting;
+    uint16_t base = (function == MODULE_MODBUS_POLL_READ_BITS) ?
+        AC_STATUS_READ_BASE_REF : AC_PARAM_READ_BASE_REF;
+    uint16_t pdu_start;
+    uint32_t len;
 
-    if (count == 0U) {
+    if ((addr == 0U) || (reg_count == 0U) || (start_reg < base)) {
         return false;
     }
-    if (!ac_ref_to_pdu(start_ref, AC_STATUS_READ_BASE_REF, &start_pdu)) {
+
+    if (!module_modbus_ac_response_byte_count(function,
+                                             reg_count,
+                                             &expect_byte_count)) {
         return false;
     }
 
-    return module_modbus_send_read_bits(addr, start_pdu, count);
+    pdu_start = (uint16_t)(start_reg - base);
+    if (function == MODULE_MODBUS_POLL_READ_BITS) {
+        len = modbus_rtu_build_read_request(addr,
+                                            MODBUS_FC_READ_COILS,
+                                            pdu_start,
+                                            reg_count,
+                                            frame,
+                                            sizeof(frame));
+    } else {
+        len = modbus_rtu_build_read_request(addr,
+                                            MODBUS_FC_READ_HOLDING_REGS,
+                                            pdu_start,
+                                            reg_count,
+                                            frame,
+                                            sizeof(frame));
+    }
+
+    if (len == 0U) {
+        return false;
+    }
+
+    memset(&waiting, 0, sizeof(waiting));
+    waiting.addr = addr;
+    waiting.device = MODULE_MODBUS_DEV_AC;
+    waiting.function = function;
+    waiting.start = start_reg;
+    waiting.count = reg_count;
+    waiting.expected_func = (function == MODULE_MODBUS_POLL_READ_BITS) ?
+        MODBUS_FC_READ_COILS : MODBUS_FC_READ_HOLDING_REGS;
+    waiting.expected_bytes = expect_byte_count;
+
+    return modbus_tx_queue_enqueue(frame, (uint16_t)len, &waiting);
+}
+
+bool module_modbus_ac_read_params(uint8_t addr, uint16_t start_reg,
+                                  uint16_t reg_count)
+{
+    if ((reg_count == 0U) || (reg_count > AC_MAX_READ_REG_COUNT)) {
+        return false;
+    }
+    if (module_modbus_ac_param_range_hits_reserved(start_reg, reg_count)) {
+        return false;
+    }
+    if (start_reg < AC_PARAM_READ_BASE_REF) {
+        return false;
+    }
+
+    return module_modbus_ac_enqueue_read(addr,
+                                         MODULE_MODBUS_POLL_READ_REGS,
+                                         start_reg,
+                                         reg_count);
+}
+
+bool module_modbus_ac_read_status(uint8_t addr, uint16_t start_reg,
+                                  uint16_t reg_count)
+{
+    if (reg_count == 0U) {
+        return false;
+    }
+    if (start_reg < AC_STATUS_READ_BASE_REF) {
+        return false;
+    }
+
+    return module_modbus_ac_enqueue_read(addr,
+                                         MODULE_MODBUS_POLL_READ_BITS,
+                                         start_reg,
+                                         reg_count);
 }
 
 modbus_rtu_status_t module_modbus_ac_parse_params(const uint8_t *frame,

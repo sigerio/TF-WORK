@@ -26,35 +26,34 @@ extern "C" {
 #define XM9505_WATER_STATE_MAX              1000U
 #define XM9505_MEASUREMENT_REG_COUNT        6U
 
-typedef union {
-    uint32_t raw;
-    struct {
-        unsigned rain_count       : 1;
-        unsigned rain_instant     : 1;
-        unsigned diff             : 1;
-        unsigned baseline         : 1;
-        unsigned raindrop_dynamic : 1;
-        unsigned water_state      : 1;
-        unsigned reserved         : 26;
-    } bit;
-} xm9505_rain_marks_t;
-
+/**
+ * @brief XM9505 雨量传感器数据
+ *        解析后缓存的传感器测量值。
+ *
+ * @note  各字段原始含义：
+ *        rain_count       — 累计雨量翻斗计数（1 count = 0.1 mm 降雨量）
+ *        instant_tenth_mm — 瞬时雨量（0.1 mm）
+ *        diff             — 差值/偏移值
+ *        baseline         — 基线值（翻斗校准基准）
+ *        raindrop_dynamic — 雨滴动态感应值（0~1000）
+ *        water_state      — 有无雨水状态（0~1000，阈值以上判断为有水）
+ */
 typedef struct {
-    module_modbus_device_config_t config;
-    module_modbus_device_status_t status;
-    xm9505_rain_marks_t marks;
-    xm9505_rain_marks_t faults;
-    uint16_t rain_count;       /* raw switch count, 1 count = 0.1 mm */
-    uint16_t instant_tenth_mm;
-    uint16_t diff;
-    uint16_t baseline;
-    uint16_t raindrop_dynamic;
-    uint16_t water_state;
+    uint8_t addr;                            /**< 从机 Modbus 地址              */
+    module_modbus_device_status_t status;    /**< 设备运行状态（在线、传感器故障）*/
+    uint16_t rain_count;                     /**< 累计雨量翻斗计数（1 = 0.1mm）*/
+    uint16_t instant_tenth_mm;               /**< 瞬时雨量（0.1 mm）            */
+    uint16_t diff;                           /**< 差值/偏移值                   */
+    uint16_t baseline;                       /**< 基线校准值                    */
+    uint16_t raindrop_dynamic;               /**< 雨滴动态检测值（0~1000）      */
+    uint16_t water_state;                    /**< 雨水状态值（0~1000）          */
 } xm9505_rain_data_t;
 
 modbus_rtu_status_t module_modbus_parse_xm9505(const uint8_t *frame,
                                                uint32_t len, uint8_t addr,
                                                xm9505_rain_data_t *out);
+bool module_modbus_xm9505_read(uint8_t addr, uint16_t start_reg,
+                                            uint16_t reg_count);
 bool module_modbus_get_xm9505_data(xm9505_rain_data_t *out);
 
 #ifdef __cplusplus

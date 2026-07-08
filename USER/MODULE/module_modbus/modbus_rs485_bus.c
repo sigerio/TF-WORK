@@ -7,6 +7,7 @@
 #include "tf_board_uart.h"
 #include "tf_hal_dma.h"
 #include "tf_hal_uart.h"
+#include "../TFSDK/config/tf_board_mcu.h"
 
 #if (MCU_CONTAIN_PRE_USART && MCU_CONTAIN_PRE_DMA)
 
@@ -90,28 +91,8 @@ void modbus_rs485_reset_runtime(modbus_rs485_bus_t *bus)
         return;
     }
 
-    bus->rx.drop_count = 0U;
     bus->tx.busy = false;
     modbus_rs485_rx_clear(bus);
-}
-
-void modbus_rs485_set_rx_callback(modbus_rs485_bus_t *bus,
-                                  module_modbus_rx_callback_t callback)
-{
-    if (bus == NULL) {
-        return;
-    }
-
-    bus->rx.callback = callback;
-}
-
-module_modbus_rx_callback_t modbus_rs485_get_rx_callback(const modbus_rs485_bus_t *bus)
-{
-    if (bus == NULL) {
-        return NULL;
-    }
-
-    return bus->rx.callback;
 }
 
 bool modbus_rs485_tx_busy(const modbus_rs485_bus_t *bus)
@@ -271,7 +252,7 @@ uint32_t modbus_rs485_rx_overflow_count(modbus_rs485_bus_t *bus)
     }
 
     __disable_irq();
-    overflow = ringbuf_overflow_count(&bus->rx.ring) + bus->rx.drop_count;
+    overflow = ringbuf_overflow_count(&bus->rx.ring);
     __enable_irq();
 
     return overflow;
@@ -296,9 +277,7 @@ void modbus_rs485_usart_irq_handler(modbus_rs485_bus_t *bus)
         rx_len = MODULE_MODBUS_RX_BUF_SIZE - remain;
 
         if ((rx_len > 0U) && (rx_len <= MODULE_MODBUS_RX_BUF_SIZE)) {
-            if (ringbuf_write(&bus->rx.ring, bus->rx.dma_buf, rx_len) < rx_len) {
-                bus->rx.drop_count++;
-            }
+            (void)ringbuf_write(&bus->rx.ring, bus->rx.dma_buf, rx_len);
         }
 
         modbus_rs485_rx_restart(bus);

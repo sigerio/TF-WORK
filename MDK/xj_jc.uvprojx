@@ -340,7 +340,7 @@
               <MiscControls></MiscControls>
               <Define>GD32F10X_HD</Define>
               <Undefine></Undefine>
-              <IncludePath>..\CMSIS;..\GD32F10X\Include;..\TFSDK\config;..\TFSDK\hal;..\TFSDK\drv;..\TFSDK\framework;..\USER;..\USER\LIB;..\USER\MODULE;..\USER\MODULE\module_ws2812;..\USER\MODULE\module_modbus</IncludePath>
+              <IncludePath>..\CMSIS;..\GD32F10X\Include;..\TFSDK\config;..\TFSDK\hal;..\TFSDK\drv;..\TFSDK\framework;..\USER;..\USER\LIB;..\USER\TOOL;..\USER\MODULE;..\USER\MODULE\module_ws2812;..\USER\MODULE\module_modbus</IncludePath>
             </VariousControls>
           </Cads>
           <Aads>
@@ -660,6 +660,16 @@
               <FilePath>..\USER\uart_and_dma.c</FilePath>
             </File>
             <File>
+              <FileName>tf_tool.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\USER\TOOL\tf_tool.c</FilePath>
+            </File>
+            <File>
+              <FileName>tf_tool.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\USER\TOOL\tf_tool.h</FilePath>
+            </File>
+            <File>
               <FileName>module_ws2812.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\USER\MODULE\module_ws2812\module_ws2812.c</FilePath>
@@ -700,14 +710,9 @@
               <FilePath>..\USER\MODULE\module_modbus\modbus_tx_queue.h</FilePath>
             </File>
             <File>
-              <FileName>module_modbus_devices.c</FileName>
+              <FileName>module_modbus_device_common.c</FileName>
               <FileType>1</FileType>
-              <FilePath>..\USER\MODULE\module_modbus\module_modbus_devices.c</FilePath>
-            </File>
-            <File>
-              <FileName>module_modbus_devices.h</FileName>
-              <FileType>5</FileType>
-              <FilePath>..\USER\MODULE\module_modbus\module_modbus_devices.h</FilePath>
+              <FilePath>..\USER\MODULE\module_modbus\module_modbus_device_common.c</FilePath>
             </File>
             <File>
               <FileName>module_modbus_device_common.h</FileName>

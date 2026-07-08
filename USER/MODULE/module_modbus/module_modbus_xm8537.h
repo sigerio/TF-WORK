@@ -11,26 +11,26 @@ extern "C" {
 #define XM8537_WATER_STATE_DETECTED         0x0001U
 #define XM8537_MEASUREMENT_REG_COUNT        1U
 
-typedef union {
-    uint32_t raw;
-    struct {
-        unsigned state    : 1;
-        unsigned reserved : 31;
-    } bit;
-} xm8537_water_marks_t;
-
+/**
+ * @brief XM8537 水浸传感器数据
+ *        解析后缓存的传感器测量值。
+ *
+ * @note  raw 为直接从寄存器读取的原始值：
+ *        0x0000 = 无水（正常），0x0001 = 水浸（告警）
+ *        water_detected 为 raw 转换为 bool 后的等效标志。
+ */
 typedef struct {
-    module_modbus_device_config_t config;
-    module_modbus_device_status_t status;
-    xm8537_water_marks_t marks;
-    xm8537_water_marks_t faults;
-    uint16_t raw;
-    bool water_detected;
+    uint8_t addr;                            /**< 从机 Modbus 地址              */
+    module_modbus_device_status_t status;    /**< 设备运行状态（在线、传感器故障）*/
+    uint16_t raw;                            /**< 原始寄存器值                  */
+    bool water_detected;                     /**< 水浸检测结果标志              */
 } xm8537_water_data_t;
 
 modbus_rtu_status_t module_modbus_parse_xm8537(const uint8_t *frame,
                                                uint32_t len, uint8_t addr,
                                                xm8537_water_data_t *out);
+bool module_modbus_xm8537_read(uint8_t addr, uint16_t start_reg,
+                                            uint16_t reg_count);
 bool module_modbus_get_xm8537_data(xm8537_water_data_t *out);
 
 #ifdef __cplusplus
