@@ -1,7 +1,7 @@
-#ifndef MODULE_MODBUS_XM9505_H
-#define MODULE_MODBUS_XM9505_H
+#ifndef TF_485_XM9505_H
+#define TF_485_XM9505_H
 
-#include "module_modbus_device_common.h"
+#include "tf_485_device_common.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -39,8 +39,8 @@ extern "C" {
  *        water_state      — 有无雨水状态（0~1000，阈值以上判断为有水）
  */
 typedef struct {
-    uint8_t addr;                            /**< 从机 Modbus 地址              */
-    module_modbus_device_status_t status;    /**< 设备运行状态（在线、传感器故障）*/
+    uint8_t slave_addr;                            /**< 从机 Modbus 地址              */
+    tf_485_dev_status_t status;    /**< 设备运行状态（在线、传感器故障）*/
     uint16_t rain_count;                     /**< 累计雨量翻斗计数（1 = 0.1mm）*/
     uint16_t instant_tenth_mm;               /**< 瞬时雨量（0.1 mm）            */
     uint16_t diff;                           /**< 差值/偏移值                   */
@@ -49,15 +49,25 @@ typedef struct {
     uint16_t water_state;                    /**< 雨水状态值（0~1000）          */
 } xm9505_rain_data_t;
 
-modbus_rtu_status_t module_modbus_parse_xm9505(const uint8_t *frame,
-                                               uint32_t len, uint8_t addr,
-                                               xm9505_rain_data_t *out);
-bool module_modbus_xm9505_read(uint8_t addr, uint16_t start_reg,
-                                            uint16_t reg_count);
-bool module_modbus_get_xm9505_data(xm9505_rain_data_t *out);
+modbus_rtu_status_t tf_485_xm9505_parse(const uint8_t *frame,
+                                        uint32_t len,
+                                        uint8_t slave_addr,
+                                        xm9505_rain_data_t *out);
+bool tf_485_xm9505_read(uint8_t slave_addr, uint16_t start_reg,
+                        uint16_t reg_count);
+bool tf_485_xm9505_write(uint8_t slave_addr, uint16_t reg,
+                         uint16_t value);
+modbus_rtu_status_t tf_485_xm9505_parse_write_ack(const uint8_t *frame,
+                                                  uint32_t len,
+                                                  uint8_t slave_addr,
+                                                  uint8_t function,
+                                                  uint16_t reg,
+                                                  uint16_t value,
+                                                  xm9505_rain_data_t *out);
+bool tf_485_xm9505_get(xm9505_rain_data_t *out);
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif /* MODULE_MODBUS_XM9505_H */
+#endif /* TF_485_XM9505_H */

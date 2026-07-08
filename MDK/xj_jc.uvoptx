@@ -862,8 +862,8 @@
       <tvExp>0</tvExp>
       <tvExpOptDlg>0</tvExpOptDlg>
       <bDave2>0</bDave2>
-      <PathWithFileName>..\USER\MODULE\module_modbus\module_modbus.c</PathWithFileName>
-      <FilenameWithoutPath>module_modbus.c</FilenameWithoutPath>
+      <PathWithFileName>..\USER\MODULE\module_modbus\tf_485_master.c</PathWithFileName>
+      <FilenameWithoutPath>tf_485_master.c</FilenameWithoutPath>
       <RteFlg>0</RteFlg>
       <bShared>0</bShared>
     </File>
@@ -874,8 +874,8 @@
       <tvExp>0</tvExp>
       <tvExpOptDlg>0</tvExpOptDlg>
       <bDave2>0</bDave2>
-      <PathWithFileName>..\USER\MODULE\module_modbus\module_modbus.h</PathWithFileName>
-      <FilenameWithoutPath>module_modbus.h</FilenameWithoutPath>
+      <PathWithFileName>..\USER\MODULE\module_modbus\tf_485_master.h</PathWithFileName>
+      <FilenameWithoutPath>tf_485_master.h</FilenameWithoutPath>
       <RteFlg>0</RteFlg>
       <bShared>0</bShared>
     </File>
@@ -886,8 +886,8 @@
       <tvExp>0</tvExp>
       <tvExpOptDlg>0</tvExpOptDlg>
       <bDave2>0</bDave2>
-      <PathWithFileName>..\USER\MODULE\module_modbus\modbus_rs485_bus.c</PathWithFileName>
-      <FilenameWithoutPath>modbus_rs485_bus.c</FilenameWithoutPath>
+      <PathWithFileName>..\USER\MODULE\module_modbus\tf_485.c</PathWithFileName>
+      <FilenameWithoutPath>tf_485.c</FilenameWithoutPath>
       <RteFlg>0</RteFlg>
       <bShared>0</bShared>
     </File>
@@ -898,8 +898,8 @@
       <tvExp>0</tvExp>
       <tvExpOptDlg>0</tvExpOptDlg>
       <bDave2>0</bDave2>
-      <PathWithFileName>..\USER\MODULE\module_modbus\modbus_rs485_bus.h</PathWithFileName>
-      <FilenameWithoutPath>modbus_rs485_bus.h</FilenameWithoutPath>
+      <PathWithFileName>..\USER\MODULE\module_modbus\tf_485.h</PathWithFileName>
+      <FilenameWithoutPath>tf_485.h</FilenameWithoutPath>
       <RteFlg>0</RteFlg>
       <bShared>0</bShared>
     </File>
@@ -910,8 +910,8 @@
       <tvExp>0</tvExp>
       <tvExpOptDlg>0</tvExpOptDlg>
       <bDave2>0</bDave2>
-      <PathWithFileName>..\USER\MODULE\module_modbus\modbus_tx_queue.c</PathWithFileName>
-      <FilenameWithoutPath>modbus_tx_queue.c</FilenameWithoutPath>
+      <PathWithFileName>..\USER\MODULE\module_modbus\tf_485_txq.c</PathWithFileName>
+      <FilenameWithoutPath>tf_485_txq.c</FilenameWithoutPath>
       <RteFlg>0</RteFlg>
       <bShared>0</bShared>
     </File>
@@ -922,8 +922,8 @@
       <tvExp>0</tvExp>
       <tvExpOptDlg>0</tvExpOptDlg>
       <bDave2>0</bDave2>
-      <PathWithFileName>..\USER\MODULE\module_modbus\modbus_tx_queue.h</PathWithFileName>
-      <FilenameWithoutPath>modbus_tx_queue.h</FilenameWithoutPath>
+      <PathWithFileName>..\USER\MODULE\module_modbus\tf_485_txq.h</PathWithFileName>
+      <FilenameWithoutPath>tf_485_txq.h</FilenameWithoutPath>
       <RteFlg>0</RteFlg>
       <bShared>0</bShared>
     </File>
@@ -934,8 +934,8 @@
       <tvExp>0</tvExp>
       <tvExpOptDlg>0</tvExpOptDlg>
       <bDave2>0</bDave2>
-      <PathWithFileName>..\USER\MODULE\module_modbus\module_modbus_device_common.c</PathWithFileName>
-      <FilenameWithoutPath>module_modbus_device_common.c</FilenameWithoutPath>
+      <PathWithFileName>..\USER\MODULE\module_modbus\tf_485_device_common.c</PathWithFileName>
+      <FilenameWithoutPath>tf_485_device_common.c</FilenameWithoutPath>
       <RteFlg>0</RteFlg>
       <bShared>0</bShared>
     </File>
@@ -946,8 +946,8 @@
       <tvExp>0</tvExp>
       <tvExpOptDlg>0</tvExpOptDlg>
       <bDave2>0</bDave2>
-      <PathWithFileName>..\USER\MODULE\module_modbus\module_modbus_device_common.h</PathWithFileName>
-      <FilenameWithoutPath>module_modbus_device_common.h</FilenameWithoutPath>
+      <PathWithFileName>..\USER\MODULE\module_modbus\tf_485_device_common.h</PathWithFileName>
+      <FilenameWithoutPath>tf_485_device_common.h</FilenameWithoutPath>
       <RteFlg>0</RteFlg>
       <bShared>0</bShared>
     </File>
@@ -958,8 +958,8 @@
       <tvExp>0</tvExp>
       <tvExpOptDlg>0</tvExpOptDlg>
       <bDave2>0</bDave2>
-      <PathWithFileName>..\USER\MODULE\module_modbus\module_modbus_xm7828.c</PathWithFileName>
-      <FilenameWithoutPath>module_modbus_xm7828.c</FilenameWithoutPath>
+      <PathWithFileName>..\USER\MODULE\module_modbus\tf_485_xm7828.c</PathWithFileName>
+      <FilenameWithoutPath>tf_485_xm7828.c</FilenameWithoutPath>
       <RteFlg>0</RteFlg>
       <bShared>0</bShared>
     </File>
@@ -970,8 +970,8 @@
       <tvExp>0</tvExp>
       <tvExpOptDlg>0</tvExpOptDlg>
       <bDave2>0</bDave2>
-      <PathWithFileName>..\USER\MODULE\module_modbus\module_modbus_xm7828.h</PathWithFileName>
-      <FilenameWithoutPath>module_modbus_xm7828.h</FilenameWithoutPath>
+      <PathWithFileName>..\USER\MODULE\module_modbus\tf_485_xm7828.h</PathWithFileName>
+      <FilenameWithoutPath>tf_485_xm7828.h</FilenameWithoutPath>
       <RteFlg>0</RteFlg>
       <bShared>0</bShared>
     </File>
@@ -982,8 +982,8 @@
       <tvExp>0</tvExp>
       <tvExpOptDlg>0</tvExpOptDlg>
       <bDave2>0</bDave2>
-      <PathWithFileName>..\USER\MODULE\module_modbus\module_modbus_xm8189.c</PathWithFileName>
-      <FilenameWithoutPath>module_modbus_xm8189.c</FilenameWithoutPath>
+      <PathWithFileName>..\USER\MODULE\module_modbus\tf_485_xm8189.c</PathWithFileName>
+      <FilenameWithoutPath>tf_485_xm8189.c</FilenameWithoutPath>
       <RteFlg>0</RteFlg>
       <bShared>0</bShared>
     </File>
@@ -994,8 +994,8 @@
       <tvExp>0</tvExp>
       <tvExpOptDlg>0</tvExpOptDlg>
       <bDave2>0</bDave2>
-      <PathWithFileName>..\USER\MODULE\module_modbus\module_modbus_xm8189.h</PathWithFileName>
-      <FilenameWithoutPath>module_modbus_xm8189.h</FilenameWithoutPath>
+      <PathWithFileName>..\USER\MODULE\module_modbus\tf_485_xm8189.h</PathWithFileName>
+      <FilenameWithoutPath>tf_485_xm8189.h</FilenameWithoutPath>
       <RteFlg>0</RteFlg>
       <bShared>0</bShared>
     </File>
@@ -1006,8 +1006,8 @@
       <tvExp>0</tvExp>
       <tvExpOptDlg>0</tvExpOptDlg>
       <bDave2>0</bDave2>
-      <PathWithFileName>..\USER\MODULE\module_modbus\module_modbus_xm8537.c</PathWithFileName>
-      <FilenameWithoutPath>module_modbus_xm8537.c</FilenameWithoutPath>
+      <PathWithFileName>..\USER\MODULE\module_modbus\tf_485_xm8537.c</PathWithFileName>
+      <FilenameWithoutPath>tf_485_xm8537.c</FilenameWithoutPath>
       <RteFlg>0</RteFlg>
       <bShared>0</bShared>
     </File>
@@ -1018,8 +1018,8 @@
       <tvExp>0</tvExp>
       <tvExpOptDlg>0</tvExpOptDlg>
       <bDave2>0</bDave2>
-      <PathWithFileName>..\USER\MODULE\module_modbus\module_modbus_xm8537.h</PathWithFileName>
-      <FilenameWithoutPath>module_modbus_xm8537.h</FilenameWithoutPath>
+      <PathWithFileName>..\USER\MODULE\module_modbus\tf_485_xm8537.h</PathWithFileName>
+      <FilenameWithoutPath>tf_485_xm8537.h</FilenameWithoutPath>
       <RteFlg>0</RteFlg>
       <bShared>0</bShared>
     </File>
@@ -1030,8 +1030,8 @@
       <tvExp>0</tvExp>
       <tvExpOptDlg>0</tvExpOptDlg>
       <bDave2>0</bDave2>
-      <PathWithFileName>..\USER\MODULE\module_modbus\module_modbus_xm9505.c</PathWithFileName>
-      <FilenameWithoutPath>module_modbus_xm9505.c</FilenameWithoutPath>
+      <PathWithFileName>..\USER\MODULE\module_modbus\tf_485_xm9505.c</PathWithFileName>
+      <FilenameWithoutPath>tf_485_xm9505.c</FilenameWithoutPath>
       <RteFlg>0</RteFlg>
       <bShared>0</bShared>
     </File>
@@ -1042,8 +1042,8 @@
       <tvExp>0</tvExp>
       <tvExpOptDlg>0</tvExpOptDlg>
       <bDave2>0</bDave2>
-      <PathWithFileName>..\USER\MODULE\module_modbus\module_modbus_xm9505.h</PathWithFileName>
-      <FilenameWithoutPath>module_modbus_xm9505.h</FilenameWithoutPath>
+      <PathWithFileName>..\USER\MODULE\module_modbus\tf_485_xm9505.h</PathWithFileName>
+      <FilenameWithoutPath>tf_485_xm9505.h</FilenameWithoutPath>
       <RteFlg>0</RteFlg>
       <bShared>0</bShared>
     </File>
@@ -1054,8 +1054,8 @@
       <tvExp>0</tvExp>
       <tvExpOptDlg>0</tvExpOptDlg>
       <bDave2>0</bDave2>
-      <PathWithFileName>..\USER\MODULE\module_modbus\module_modbus_ac.c</PathWithFileName>
-      <FilenameWithoutPath>module_modbus_ac.c</FilenameWithoutPath>
+      <PathWithFileName>..\USER\MODULE\module_modbus\tf_485_ac.c</PathWithFileName>
+      <FilenameWithoutPath>tf_485_ac.c</FilenameWithoutPath>
       <RteFlg>0</RteFlg>
       <bShared>0</bShared>
     </File>
@@ -1066,8 +1066,8 @@
       <tvExp>0</tvExp>
       <tvExpOptDlg>0</tvExpOptDlg>
       <bDave2>0</bDave2>
-      <PathWithFileName>..\USER\MODULE\module_modbus\module_modbus_ac.h</PathWithFileName>
-      <FilenameWithoutPath>module_modbus_ac.h</FilenameWithoutPath>
+      <PathWithFileName>..\USER\MODULE\module_modbus\tf_485_ac.h</PathWithFileName>
+      <FilenameWithoutPath>tf_485_ac.h</FilenameWithoutPath>
       <RteFlg>0</RteFlg>
       <bShared>0</bShared>
     </File>

@@ -33,7 +33,7 @@ OF SUCH DAMAGE.
 */
 
 #include "gd32f10x_it.h"
-#include "../USER/MODULE/module_modbus/module_modbus.h"
+#include "../USER/MODULE/module_modbus/tf_485_master.h"
 
 extern void tf_delay_systick_irq_handler(void);
 
@@ -151,5 +151,5 @@ void SysTick_Handler(void)
 
 void USART2_IRQHandler(void)
 {
-    module_modbus_usart2_irq_handler();
+    tf_485_usart2_irq();
 }

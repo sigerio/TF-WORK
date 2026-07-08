@@ -102,6 +102,36 @@ uint32_t modbus_rtu_build_read_request(uint8_t addr, uint8_t function,
     return MODBUS_RTU_REQUEST_LEN;
 }
 
+uint32_t modbus_rtu_build_write_single_request(uint8_t addr, uint8_t function,
+                                               uint16_t reg, uint16_t value,
+                                               uint8_t *out, uint32_t out_size)
+{
+    if ((out == 0) || (out_size < MODBUS_RTU_REQUEST_LEN)) {
+        return 0U;
+    }
+
+    switch (function) {
+    case MODBUS_FC_WRITE_SINGLE_COIL:
+        if ((value != 0x0000U) && (value != 0xFF00U)) {
+            return 0U;
+        }
+        break;
+
+    case MODBUS_FC_WRITE_SINGLE_REG:
+        break;
+
+    default:
+        return 0U;
+    }
+
+    out[0] = addr;
+    out[1] = function;
+    modbus_rtu_put_u16_be(&out[2], reg);
+    modbus_rtu_put_u16_be(&out[4], value);
+    modbus_rtu_append_crc(out, 6U);
+    return MODBUS_RTU_REQUEST_LEN;
+}
+
 modbus_rtu_status_t modbus_rtu_parse_exception(const uint8_t *frame, uint32_t len,
                                                uint8_t expect_addr,
                                                uint8_t expect_function,
@@ -217,5 +247,46 @@ modbus_rtu_status_t modbus_rtu_parse_read_bits_response(const uint8_t *frame,
     }
 
     *bit_count = out_count;
+    return MODBUS_RTU_OK;
+}
+
+modbus_rtu_status_t modbus_rtu_parse_write_single_response(
+    const uint8_t *frame,
+    uint32_t len,
+    uint8_t expect_addr,
+    uint8_t expect_function,
+    uint16_t expect_reg,
+    uint16_t expect_value)
+{
+    uint16_t reg;
+    uint16_t value;
+
+    if (frame == 0) {
+        return MODBUS_RTU_ERR_PARAM;
+    }
+    if (len != MODBUS_RTU_WRITE_SINGLE_RESPONSE_LEN) {
+        return MODBUS_RTU_ERR_LEN;
+    }
+    if (!modbus_rtu_check_crc(frame, len)) {
+        return MODBUS_RTU_ERR_CRC;
+    }
+    if (frame[0] != expect_addr) {
+        return MODBUS_RTU_ERR_ADDR;
+    }
+    if (frame[1] != expect_function) {
+        return ((frame[1] & 0x80U) != 0U) ?
+            MODBUS_RTU_ERR_EXCEPTION : MODBUS_RTU_ERR_FUNC;
+    }
+    if ((expect_function != MODBUS_FC_WRITE_SINGLE_COIL) &&
+        (expect_function != MODBUS_FC_WRITE_SINGLE_REG)) {
+        return MODBUS_RTU_ERR_FUNC;
+    }
+
+    reg = modbus_rtu_get_u16_be(&frame[2]);
+    value = modbus_rtu_get_u16_be(&frame[4]);
+    if ((reg != expect_reg) || (value != expect_value)) {
+        return MODBUS_RTU_ERR_VALUE;
+    }
+
     return MODBUS_RTU_OK;
 }

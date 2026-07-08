@@ -1,5 +1,5 @@
-#ifndef MODULE_MODBUS_H
-#define MODULE_MODBUS_H
+#ifndef TF_485_MASTER_H
+#define TF_485_MASTER_H
 
 #include <stdint.h>
 
@@ -48,7 +48,7 @@ extern "C" {
 #endif
 
 #ifndef MODULE_MODBUS_MASTER_PERIOD_MS
-#define MODULE_MODBUS_MASTER_PERIOD_MS 10U   /**< master_task 轮询周期（毫秒）     */
+#define MODULE_MODBUS_MASTER_PERIOD_MS 10U   /**< master_task 执行周期（毫秒）     */
 #endif
 
 #ifndef MODULE_MODBUS_QUEUE_FILL_PERIOD_MS
@@ -61,19 +61,28 @@ extern "C" {
 
 /** @brief 支持的 Modbus 从机设备类型 */
 typedef enum {
-    MODULE_MODBUS_DEV_XM7828_TH = 0,    /**< XM7828 温湿度传感器                  */
-    MODULE_MODBUS_DEV_XM8189_WIND,       /**< XM8189 风速风向传感器                */
-    MODULE_MODBUS_DEV_XM8537_WATER,      /**< XM8537 水浸传感器                   */
-    MODULE_MODBUS_DEV_XM9505_RAIN,       /**< XM9505 雨量传感器                   */
-    MODULE_MODBUS_DEV_AC,                /**< 空调设备                            */
-    MODULE_MODBUS_DEV_CUSTOM,            /**< 自定义设备（使用通用解析）           */
-} module_modbus_device_type_t;
+    TF_485_DEV_XM7828_TH = 0,     /**< XM7828 温湿度传感器                  */
+    TF_485_DEV_XM8189_WIND,       /**< XM8189 风速风向传感器                */
+    TF_485_DEV_XM8537_WATER,      /**< XM8537 水浸传感器                   */
+    TF_485_DEV_XM9505_RAIN,       /**< XM9505 雨量传感器                   */
+    TF_485_DEV_AC,                /**< 空调设备                            */
+    TF_485_DEV_COUNT,             /**< 设备类型数量                         */
+} tf_485_dev_type_t;
 
-/** @brief 轮询操作的功能类型 */
+/** @brief Modbus 读请求类型 */
 typedef enum {
-    MODULE_MODBUS_POLL_READ_REGS = 0, /**< 读保持寄存器（Modbus 功能码 0x03） */
-    MODULE_MODBUS_POLL_READ_BITS,     /**< 读线圈/输入位（Modbus 功能码 0x01/0x02） */
-} module_modbus_poll_function_t;
+    TF_485_READ_REGS = 0, /**< 读保持寄存器（Modbus 功能码 0x03） */
+    TF_485_READ_BITS,     /**< 读线圈/输入位（Modbus 功能码 0x01/0x02） */
+} tf_485_read_type_t;
+
+/** @brief 主站请求类型，描述请求/响应形态 */
+typedef enum {
+    TF_485_REQ_READ_REGS = 0,       /**< 读寄存器响应：slave func byte_count data crc */
+    TF_485_REQ_READ_BITS,           /**< 读位响应：slave func byte_count data crc     */
+    TF_485_REQ_WRITE_COIL,          /**< 写单线圈响应：固定 8 字节回显              */
+    TF_485_REQ_WRITE_REG,           /**< 写单寄存器响应：固定 8 字节回显            */
+    TF_485_REQ_COUNT,               /**< 请求类型数量                              */
+} tf_485_req_type_t;
 
 #if MODULE_MODBUS_ENABLE_DIAG
 /**
@@ -81,12 +90,12 @@ typedef enum {
  *        汇总主站任务层和发送队列层的运行统计数据，
  *        可用于串口输出调试、性能分析或远程监控。
  *
- * @note  tick_count 在每次 master_task 调用时递增，
- *        其余计数字段归零时机由 module_modbus_clear_diag() 控制。
+ * @note  task_tick 在每次 master_task 调用时递增，
+ *        其余计数字段归零时机由 tf_485_clear_diag() 控制。
  */
 typedef struct {
     /* ── 主站任务层统计 ── */
-    uint32_t tick_count;            /**< master_task 累计执行次数（tick）       */
+    uint32_t task_tick;            /**< master_task 累计执行次数（tick）       */
     uint32_t request_count;         /**< 累计发送的请求帧数                    */
     uint32_t response_count;        /**< 累计收到的有效响应帧数                */
     uint32_t timeout_count;         /**< 等待响应超时次数                      */
@@ -97,26 +106,26 @@ typedef struct {
     uint32_t parse_error_count;     /**< 响应解析失败（非 CRC）次数            */
 
     /* ── 发送队列层统计 ── */
-    uint16_t send_buf_write_index;  /**< 发送环形缓冲区当前写入位置索引        */
+    uint16_t txq_write_pos;        /**< 发送队列帧缓冲区当前写入位置索引      */
     uint32_t enqueue_count;         /**< 累计入队次数                          */
     uint32_t dequeue_count;         /**< 累计出队次数                          */
-    uint32_t queue_overwrite_drop_count; /**< 入队覆盖旧数据丢弃计数           */
-    uint32_t queue_full_drop_count;      /**< 队列满丢弃计数                   */
-    uint32_t queue_invalid_count;   /**< 无效入队请求计数                      */
-} module_modbus_diag_t;
+    uint32_t txq_overwrite_drop_count; /**< 发送队列覆盖旧帧丢弃计数        */
+    uint32_t txq_full_drop_count;      /**< 发送队列满丢弃计数              */
+    uint32_t txq_invalid_count;        /**< 发送队列无效请求计数            */
+} tf_485_diag_t;
 #endif
 
-bool module_modbus_init(void);
-void module_modbus_master_task(void);
-void module_modbus_queue_fill_task(void);
+bool tf_485_master_init(void);
+void tf_485_master_task(void);
+void tf_485_query_task(void);
 #if MODULE_MODBUS_ENABLE_DIAG
-void module_modbus_get_diag(module_modbus_diag_t *diag);
-void module_modbus_clear_diag(void);
+void tf_485_get_diag(tf_485_diag_t *diag);
+void tf_485_clear_diag(void);
 #endif
-void module_modbus_usart2_irq_handler(void);
+void tf_485_usart2_irq(void);
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif /* MODULE_MODBUS_H */
+#endif /* TF_485_MASTER_H */

@@ -1,7 +1,7 @@
-#ifndef MODULE_MODBUS_AC_H
-#define MODULE_MODBUS_AC_H
+#ifndef TF_485_AC_H
+#define TF_485_AC_H
 
-#include "module_modbus_device_common.h"
+#include "tf_485_device_common.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -64,7 +64,7 @@ extern "C" {
  *        标记 ac_params_t 中哪些字段已被成功解析填充。
  *        用于判读数据是否有效（全部清零表示从未收到过有效数据）。
  *
- *  使用方式（module_modbus.c）：
+ *  使用方式（tf_485_master.c）：
  *    - 解析成功时置位对应 bit
  *    - 模块运行态 reset 时对 marks.raw 整体清零
  *    - 外部读取时检查 marks.raw != 0 判断数据有效
@@ -172,7 +172,7 @@ typedef union {
  *        包括各部件启停状态和故障告警。
  *
  *  marks 位标记指示各成员是否已成功解析。
- *  外部通过 module_modbus_get_ac_status() 读取并检查 marks.raw != 0。
+ *  外部通过 tf_485_ac_get_status() 读取并检查 marks.raw != 0。
  */
 typedef struct {
     ac_status_marks_t marks;                   /**< 各字段有效位标记              */
@@ -205,31 +205,44 @@ typedef struct {
  *        参数数据和运行状态数据是该设备的两个内部数据分组。
  */
 typedef struct {
-    uint8_t addr;                              /**< 从机 Modbus 地址              */
-    module_modbus_device_status_t status;      /**< 设备运行状态（在线、传感器故障）*/
+    uint8_t slave_addr;                              /**< 从机 Modbus 地址              */
+    tf_485_dev_status_t status;      /**< 设备运行状态（在线、传感器故障）*/
     ac_params_t params;                        /**< 空调参数数据                  */
     ac_status_t run_status;                    /**< 空调运行状态数据              */
 } ac_device_t;
 
-bool module_modbus_ac_read_params(uint8_t addr, uint16_t start_reg,
-                                  uint16_t reg_count);
-bool module_modbus_ac_read_status(uint8_t addr, uint16_t start_reg,
-                                  uint16_t reg_count);
-modbus_rtu_status_t module_modbus_ac_parse_params(const uint8_t *frame,
-                                                  uint32_t len, uint8_t addr,
-                                                  uint16_t start_ref,
-                                                  uint16_t requested_count,
-                                                  ac_params_t *out);
-modbus_rtu_status_t module_modbus_ac_parse_status(const uint8_t *frame,
-                                                  uint32_t len, uint8_t addr,
-                                                  uint16_t start_ref,
-                                                  ac_status_t *out);
-bool module_modbus_get_ac_params(ac_params_t *out);
-bool module_modbus_get_ac_status(ac_status_t *out);
-bool module_modbus_get_ac_data(ac_device_t *out);
+bool tf_485_ac_read_params(uint8_t slave_addr, uint16_t start_reg,
+                           uint16_t reg_count);
+bool tf_485_ac_read_status(uint8_t slave_addr, uint16_t start_reg,
+                           uint16_t reg_count);
+bool tf_485_ac_write_status(uint8_t slave_addr, uint16_t status_ref,
+                            bool on);
+bool tf_485_ac_write_param(uint8_t slave_addr, uint16_t param_ref,
+                           int16_t value);
+modbus_rtu_status_t tf_485_ac_parse_params(const uint8_t *frame,
+                                           uint32_t len,
+                                           uint8_t slave_addr,
+                                           uint16_t start_ref,
+                                           uint16_t requested_count,
+                                           ac_params_t *out);
+modbus_rtu_status_t tf_485_ac_parse_status(const uint8_t *frame,
+                                           uint32_t len,
+                                           uint8_t slave_addr,
+                                           uint16_t start_ref,
+                                           ac_status_t *out);
+modbus_rtu_status_t tf_485_ac_parse_write_ack(const uint8_t *frame,
+                                              uint32_t len,
+                                              uint8_t slave_addr,
+                                              uint8_t function,
+                                              uint16_t ref,
+                                              uint16_t value,
+                                              ac_device_t *out);
+bool tf_485_ac_get_params(ac_params_t *out);
+bool tf_485_ac_get_status(ac_status_t *out);
+bool tf_485_ac_get(ac_device_t *out);
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif /* MODULE_MODBUS_AC_H */
+#endif /* TF_485_AC_H */
