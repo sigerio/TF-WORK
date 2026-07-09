@@ -8,10 +8,6 @@
 extern "C" {
 #endif
 
-#ifndef configTOTAL_HEAP_SIZE
-#define configTOTAL_HEAP_SIZE         4096U
-#endif
-
 #ifndef portBYTE_ALIGNMENT
 #define portBYTE_ALIGNMENT            8U
 #endif
@@ -20,16 +16,20 @@ extern "C" {
 #define configHEAP_POOL_MAX           4U
 #endif
 
-#ifndef configDEFAULT_HEAP_INDEX
-#define configDEFAULT_HEAP_INDEX      0U
+#if ( ( configHEAP_POOL_MAX < 1U ) || ( configHEAP_POOL_MAX > 127U ) )
+#error configHEAP_POOL_MAX must be in the range 1..127
 #endif
 
+typedef int8_t HeapHandle_t;
 
-void *pvPortMalloc(size_t xWantedSize);
-void vPortFree(void *pv);
-size_t xPortGetFreeHeapSize(void);
-size_t xPortGetMinimumEverFreeHeapSize(void);
-void vPortInitialiseBlocks(void);
+#define portHEAP_INVALID_HANDLE       ((HeapHandle_t)-1)
+
+HeapHandle_t vPortHeapInit(uint8_t *pucHeap, size_t xHeapSize);
+void *pvPortMalloc(HeapHandle_t xHeap, size_t xWantedSize);
+void vPortFree(HeapHandle_t xHeap, void *pv);
+size_t xPortGetFreeHeapSize(HeapHandle_t xHeap);
+size_t xPortGetMinimumEverFreeHeapSize(HeapHandle_t xHeap);
+void vPortInitialiseBlocks(HeapHandle_t xHeap);
 
 #ifdef __cplusplus
 }

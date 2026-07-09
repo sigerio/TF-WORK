@@ -37,105 +37,91 @@
 typedef struct tf_usr_modbus_event_task {
     uint8_t event_id;
     uint8_t slave_addr;
-    uint16_t ref;
-    uint16_t value;
-    bool (*write)(const struct tf_usr_modbus_event_task *task);
+    bool (*write)(uint8_t slave_addr, uint16_t ref, uint16_t value);
 } tf_usr_modbus_event_task_t;
 
-static bool tf_usr_modbus_write_xm7828(
-    const tf_usr_modbus_event_task_t *task)
+typedef struct {
+    uint8_t event_id;
+    uint16_t ref;
+    uint16_t value;
+} tf_usr_modbus_write_arg_t;
+
+static bool tf_usr_modbus_write_xm7828(uint8_t slave_addr,
+                                       uint16_t ref,
+                                       uint16_t value)
 {
-    return tf_485_xm7828_write(task->slave_addr,
-                               task->ref,
-                               (uint16_t)task->value);
+    return tf_485_xm7828_write(slave_addr, ref, value);
 }
 
-static bool tf_usr_modbus_write_xm8189(
-    const tf_usr_modbus_event_task_t *task)
+static bool tf_usr_modbus_write_xm8189(uint8_t slave_addr,
+                                       uint16_t ref,
+                                       uint16_t value)
 {
-    return tf_485_xm8189_write(task->slave_addr,
-                               task->ref,
-                               (uint16_t)task->value);
+    return tf_485_xm8189_write(slave_addr, ref, value);
 }
 
-static bool tf_usr_modbus_write_xm8537(
-    const tf_usr_modbus_event_task_t *task)
+static bool tf_usr_modbus_write_xm8537(uint8_t slave_addr,
+                                       uint16_t ref,
+                                       uint16_t value)
 {
-    return tf_485_xm8537_write(task->slave_addr,
-                               task->ref,
-                               (uint16_t)task->value);
+    return tf_485_xm8537_write(slave_addr, ref, value);
 }
 
-static bool tf_usr_modbus_write_xm9505(
-    const tf_usr_modbus_event_task_t *task)
+static bool tf_usr_modbus_write_xm9505(uint8_t slave_addr,
+                                       uint16_t ref,
+                                       uint16_t value)
 {
-    return tf_485_xm9505_write(task->slave_addr,
-                               task->ref,
-                               (uint16_t)task->value);
+    return tf_485_xm9505_write(slave_addr, ref, value);
 }
 
-static bool tf_usr_modbus_write_ac_status(
-    const tf_usr_modbus_event_task_t *task)
+static bool tf_usr_modbus_write_ac_status(uint8_t slave_addr,
+                                          uint16_t ref,
+                                          uint16_t value)
 {
-    return tf_485_ac_write_status(task->slave_addr,
-                                  task->ref,
-                                  task->value != 0);
+    return tf_485_ac_write_status(slave_addr, ref, value != 0U);
 }
 
-static bool tf_usr_modbus_write_ac_param(
-    const tf_usr_modbus_event_task_t *task)
+static bool tf_usr_modbus_write_ac_param(uint8_t slave_addr,
+                                         uint16_t ref,
+                                         uint16_t value)
 {
-    return tf_485_ac_write_param(task->slave_addr,
-                                 task->ref,
-                                 (int16_t)task->value);
+    return tf_485_ac_write_param(slave_addr, ref, (int16_t)value);
 }
 
-static tf_usr_modbus_event_task_t s_modbus_write_tasks[] = {
+static const tf_usr_modbus_event_task_t s_modbus_write_tasks[] = {
     {
         TF_USR_EVENT_MODBUS_XM7828_WRITE,
         MODULE_MODBUS_XM7828_ADDR,
-        0U,
-        0,
         tf_usr_modbus_write_xm7828,
     },
     {
         TF_USR_EVENT_MODBUS_XM8189_WRITE,
         MODULE_MODBUS_XM8189_ADDR,
-        0U,
-        0,
         tf_usr_modbus_write_xm8189,
     },
     {
         TF_USR_EVENT_MODBUS_XM8537_WRITE,
         MODULE_MODBUS_XM8537_ADDR,
-        0U,
-        0,
         tf_usr_modbus_write_xm8537,
     },
     {
         TF_USR_EVENT_MODBUS_XM9505_WRITE,
         MODULE_MODBUS_XM9505_ADDR,
-        0U,
-        0,
         tf_usr_modbus_write_xm9505,
     },
     {
         TF_USR_EVENT_MODBUS_AC_STATUS_WRITE,
         MODULE_MODBUS_AC_ADDR,
-        AC_STATUS_POWER_MONITOR,
-        0,
         tf_usr_modbus_write_ac_status,
     },
     {
         TF_USR_EVENT_MODBUS_AC_PARAM_WRITE,
         MODULE_MODBUS_AC_ADDR,
-        0U,
-        0,
         tf_usr_modbus_write_ac_param,
     },
 };
 
-static tf_usr_modbus_event_task_t *tf_usr_event_find_write_task(
+static const tf_usr_modbus_event_task_t *tf_usr_event_find_write_task(
     uint8_t event_id)
 {
     uint8_t i;
@@ -154,22 +140,28 @@ static tf_usr_modbus_event_task_t *tf_usr_event_find_write_task(
 
 static void tf_usr_modbus_write_event_cb(void *arg)
 {
-    const tf_usr_modbus_event_task_t *task =
-        (const tf_usr_modbus_event_task_t *)arg;
+    const tf_usr_modbus_write_arg_t *write_arg =
+        (const tf_usr_modbus_write_arg_t *)arg;
+    const tf_usr_modbus_event_task_t *task;
     bool queued;
 
+    if (write_arg == 0) {
+        return;
+    }
+
+    task = tf_usr_event_find_write_task(write_arg->event_id);
     if ((task == 0) || (task->write == 0)) {
         return;
     }
 
-    queued = task->write(task);
+    queued = task->write(task->slave_addr, write_arg->ref, write_arg->value);
     if (!queued) {
         TF_DEBUG("EVENT",
                  "modbus write enqueue failed event=%u slave=%u ref=0x%04X value=0x%04X\n",
                  (unsigned)task->event_id,
                  (unsigned)task->slave_addr,
-                 (unsigned)task->ref,
-                 (unsigned)task->value);
+                 (unsigned)write_arg->ref,
+                 (unsigned)write_arg->value);
     }
 }
 
@@ -183,7 +175,6 @@ void tf_usr_event_task_init(void)
          i++) {
         tf_os_soft_event_task(s_modbus_write_tasks[i].event_id,
                               tf_usr_modbus_write_event_cb,
-                              (void *)&s_modbus_write_tasks[i],
                               TF_USR_EVENT_TASK_PRIORITY);
     }
 }
@@ -192,20 +183,23 @@ int8_t tf_usr_event_task_post_write(uint8_t event_id,
                                     uint16_t ref,
                                     uint16_t value)
 {
-    tf_usr_modbus_event_task_t *task = tf_usr_event_find_write_task(event_id);
+    const tf_usr_modbus_event_task_t *task;
+    tf_usr_modbus_write_arg_t arg;
+
+    task = tf_usr_event_find_write_task(event_id);
 
     if (task == 0) {
         return -1;
     }
 
-    task->ref = ref;
-    task->value = value;
-    tf_os_event_trigger(event_id, 1U);
+    arg.event_id = event_id;
+    arg.ref = ref;
+    arg.value = value;
 
-    return 0;
+    return tf_os_event_trigger(event_id, &arg, sizeof(arg), 1U);
 }
 
 void tf_usr_event_task_trigger(uint8_t event_id)
 {
-    tf_os_event_trigger(event_id, 1U);
+    (void)tf_os_event_trigger(event_id, 0, 0U, 1U);
 }

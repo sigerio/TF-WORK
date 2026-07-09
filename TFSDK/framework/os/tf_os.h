@@ -50,12 +50,12 @@
  * | 任务  | 共享变量  | 生产者                | 消费者        | 保护策略               |
  * |-------|---------|-----------------------|--------------|----------------------|
  * | Timer | 无      | 读硬件定时器（无 ISR）  | 主循环只读     | 天然无竞态             |
- * | Event | count   | ISR/主循环             | 主循环自减     | 用户保证无并发 trigger  |
+ * | Event | count/arg | 业务代码             | 主循环自减/释放 | 用户保证无并发 trigger  |
  * | Pool  | head/tail| 主循环回调            | 主循环取出     | 单线程，无需保护        |
  *
- * ISR 允许调用的框架接口：
- * - 任意 ISR：tf_os_event_trigger()（仅 count==0 时写入）
+ * ISR 调用限制：
  * - 禁止：tf_os_soft_pool_task()（仅主循环内调用）
+ * - 禁止：tf_os_event_trigger()（可能分配 event 参数内存）
  * - 禁止：任何 Timer 操作（Timer 完全在主循环上下文中运行）
  * - 禁止：tf_os_soft_pool_task()（仅主循环内调用）
  * - 禁止：任何 Timer 操作（Timer 完全在主循环上下文中运行）
