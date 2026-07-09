@@ -1,5 +1,6 @@
 #include "../USER/uart_and_dma.h"
 #include "../USER/MODULE/module_modbus/tf_485_master.h"
+#include "../USER/TASK/tf_usr_event_task.h"
 #include "../TFSDK/framework/os/tf_os.h"
 
 static void tf_485_master_timer_task(void *arg)
@@ -20,6 +21,7 @@ int main(void)
     tf_485_master_init();
 
     tf_os_init();
+    tf_usr_event_task_init();
     tf_os_soft_timer_task(tf_485_master_timer_task,
                           0,
                           MODULE_MODBUS_MASTER_PERIOD_MS,
