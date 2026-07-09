@@ -11,6 +11,10 @@ extern "C" {
 #define TF_USR_EVENT_MODBUS_BASE               0U
 #endif
 
+#define TF_USR_EVENT_TASK_OK                   0
+#define TF_USR_EVENT_TASK_ERR_EVENT            (-1)
+#define TF_USR_EVENT_TASK_ERR_ADDR             (-2)
+
 typedef enum {
     TF_USR_EVENT_MODBUS_XM7828_WRITE =
         TF_USR_EVENT_MODBUS_BASE,
@@ -22,11 +26,13 @@ typedef enum {
     TF_USR_EVENT_MODBUS_COUNT,
 } tf_usr_event_id_t;
 
+/**
+ * @brief 注册用户软事件任务。
+ *
+ * 必须在 tf_os_init() 之后、投递事件之前调用。
+ */
 void tf_usr_event_task_init(void);
-int8_t tf_usr_event_task_post_write(uint8_t event_id,
-                                    uint16_t ref,
-                                    uint16_t value);
-void tf_usr_event_task_trigger(uint8_t event_id);
+
 
 #ifdef __cplusplus
 }

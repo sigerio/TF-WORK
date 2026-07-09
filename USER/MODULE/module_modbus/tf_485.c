@@ -5,6 +5,7 @@
 #include "gd32f10x_misc.h"
 #include "tf_board_dma.h"
 #include "tf_board_uart.h"
+#include "tf_drv_io.h"
 #include "tf_hal_dma.h"
 #include "tf_hal_uart.h"
 #include "../TFSDK/config/tf_board_mcu.h"
@@ -15,6 +16,8 @@
 #define TF_485_DMA_ID       E_DRV_DMA_1
 #define TF_485_RX_DMA_CH    E_DRV_D0_CH2
 #define TF_485_TX_DMA_CH    E_DRV_D0_CH4
+#define TF_485_CTRL_RX      0U
+#define TF_485_CTRL_TX      1U
 
 static void *uart_base(void)
 {
@@ -34,6 +37,20 @@ static uint8_t rx_dma_hw_ch(void)
 static uint8_t tx_dma_hw_ch(void)
 {
     return (uint8_t)dma_configs[TF_485_DMA_ID].ch[TF_485_TX_DMA_CH].channel;
+}
+
+static void tf_485_ctrl_rx(tf_485_t *ctx)
+{
+    if ((ctx != NULL) && (ctx->hw.ctrl != NULL)) {
+        tf_drv_io_set(ctx->hw.ctrl, TF_485_CTRL_RX);
+    }
+}
+
+static void tf_485_ctrl_tx(tf_485_t *ctx)
+{
+    if ((ctx != NULL) && (ctx->hw.ctrl != NULL)) {
+        tf_drv_io_set(ctx->hw.ctrl, TF_485_CTRL_TX);
+    }
 }
 
 static void tf_485_stop_rx_dma(tf_485_t *ctx)
@@ -73,11 +90,14 @@ bool tf_485_init(tf_485_t *ctx)
     memset(ctx, 0, sizeof(*ctx));
     ctx->hw.uart = tf_drv_uart_register(TF_485_UART_ID);
     ctx->hw.dma = tf_drv_dma_register(TF_485_DMA_ID);
+    ctx->hw.ctrl = tf_drv_io_register(E_IO_485_CTRL);
 
-    if ((ctx->hw.uart == NULL) || (ctx->hw.dma == NULL)) {
+    if ((ctx->hw.uart == NULL) || (ctx->hw.dma == NULL) ||
+        (ctx->hw.ctrl == NULL)) {
         return false;
     }
 
+    tf_485_ctrl_rx(ctx);
     ringbuf_init(&ctx->rx.fifo, ctx->rx.fifo_buf, sizeof(ctx->rx.fifo_buf));
     tf_485_restart_rx_dma(ctx);
     tf_hal_uart_interrupt_enable(uart_base(), USART_INT_IDLE);
@@ -93,6 +113,7 @@ void tf_485_reset(tf_485_t *ctx)
     }
 
     ctx->tx.busy = false;
+    tf_485_ctrl_rx(ctx);
     tf_485_rx_clear(ctx);
 }
 
@@ -126,13 +147,15 @@ void tf_485_tx_service(tf_485_t *ctx)
     tf_hal_dma_flag_clear(dma_base(),
                           tx_dma_hw_ch(),
                           DMA_FLAG_G);
+    tf_485_ctrl_rx(ctx);
     ctx->tx.busy = false;
 }
 
 bool tf_485_tx_start(tf_485_t *ctx, uint32_t len)
 {
     if ((ctx == NULL) || (ctx->hw.uart == NULL) || (ctx->hw.dma == NULL) ||
-        (len == 0U) || (len > MODULE_MODBUS_TX_BUF_SIZE) || ctx->tx.busy) {
+        (ctx->hw.ctrl == NULL) || (len == 0U) ||
+        (len > MODULE_MODBUS_TX_BUF_SIZE) || ctx->tx.busy) {
         return false;
     }
 
@@ -149,6 +172,7 @@ bool tf_485_tx_start(tf_485_t *ctx, uint32_t len)
                           tx_dma_hw_ch(),
                           DMA_FLAG_G);
     tf_hal_uart_flag_clear(uart_base(), USART_FLAG_TC);
+    tf_485_ctrl_tx(ctx);
     tf_hal_config_uart_dma_ch(uart_base(),
                               tx_dma_hw_ch(),
                               1U);

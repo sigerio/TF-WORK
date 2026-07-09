@@ -117,4 +117,33 @@ tf_drv_io_config_t io_configs[E_IO_MAX] = {
         .mode       = GPIO_MODE_AF_PP,
         .speed      = GPIO_OSPEED_50MHZ,
     },
+
+    [E_IO_485_CTRL] = {
+        .port       = (uintptr_t)GPIOA,
+        .pin        = GPIO_PIN_11,
+        .mode       = GPIO_MODE_OUT_PP,
+        .speed      = GPIO_OSPEED_50MHZ,
+        .init_state = 1U,
+    },
+
+    [E_IO_KEY_HELIPED] = {
+        .port       = (uintptr_t)GPIOB,
+        .pin        = GPIO_PIN_7,
+        .mode       = GPIO_MODE_IPD,
+        .speed      = GPIO_OSPEED_50MHZ,
+    },
+
+    [E_IO_KEY_DOOR] = {
+        .port       = (uintptr_t)GPIOB,
+        .pin        = GPIO_PIN_6,
+        .mode       = GPIO_MODE_IPD,
+        .speed      = GPIO_OSPEED_50MHZ,
+    },
+    [E_IO_KEY_EM_STOP] = {
+        .port       = (uintptr_t)GPIOC,
+        .pin        = GPIO_PIN_10,
+        .mode       = GPIO_MODE_IPD,
+        .speed      = GPIO_OSPEED_50MHZ,
+    },
+
 };

@@ -56,6 +56,14 @@ typedef enum {
     E_IO_S2_SCK,        /* PB3  — SPI2_SCK  */
     E_IO_S2_MO,         /* PB5  — SPI2_MOSI */
 
+    E_IO_485_CTRL,      /* PA11 — RS485 DE/RE 收发控制 */
+
+
+    E_IO_KEY_HELIPED,   /*PB7 - 停机坪升降控制*/
+    E_IO_KEY_DOOR,      /*PB6 - 机巢门控制*/
+    E_IO_KEY_EM_STOP,   /*PC10 - 急停检测*/
+
+
     E_IO_MAX
 } tf_drv_io_id_e;
 

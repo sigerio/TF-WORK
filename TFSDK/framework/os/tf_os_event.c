@@ -38,7 +38,7 @@ static tf_os_event_pool_t os_event_pool[TF_OS_EVENT_NODE_MAX];
 static tf_os_event_slot_t os_event_slots[TF_OS_EVENT_NODE_MAX];
 
 /** @brief event_id 到 pool 索引的映射，-1 表示未注册 */
-static uint8_t os_event_id_map[TF_OS_EVENT_SLOT_MAX];
+static int8_t os_event_id_map[TF_OS_EVENT_SLOT_MAX];
 
 /** @brief 已注册事件计数 */
 static uint8_t event_pool_count = 0;

@@ -7,25 +7,11 @@
  * - 仅主循环内使用（Application 回调中动态添加），ISR 中禁止调用
  * - 全局一个 FIFO 队列，无优先级，count 管理满/空
  * - 每次主循环仅执行队头一个任务，执行后从队列移除
- * - 满时（count==MAX）：返回 -1，静默丢弃
+ * - arg 非空且 arg_size > 0 时，内部从 pool heap 分配并拷贝参数
+ * - callback 消费的是内部参数副本，callback 返回后由 Pool 释放
+ * - 满时（count==MAX）：返回负数，任务不入队
  * - 空时（count==0）：主循环跳过
  * - 单线程操作，无需并发保护
- *
- * ============ 使用示例 ============
- *
- * @code
- *   #include "os/tf_os.h"
- *
- *   void deferred_work(void *arg) {
- *       TF_PRINTF("Deferred task: %s\n", (const char *)arg);
- *   }
- *
- *   // 在主循环回调中动态添加池任务
- *   int8_t ret = tf_os_soft_pool_task(deferred_work, "hello");
- *   if (ret == -1) {
- *       TF_PRINTF("Pool full!\n");
- *   }
- * @endcode
  */
 
 #ifndef TF_OS_POOL_H
@@ -44,18 +30,37 @@ extern "C" {
 #define TF_OS_POOL_MAX   8
 #endif
 
+#if ((TF_OS_POOL_MAX == 0U) || (TF_OS_POOL_MAX > 255U))
+#error TF_OS_POOL_MAX must be in the range 1..255
+#endif
+
+/** @brief Pool 参数内存池大小（字节），可通过编译器 -D 覆盖 */
+#ifndef TF_OS_POOL_HEAP_SIZE
+#define TF_OS_POOL_HEAP_SIZE   256U
+#endif
+
+#define TF_OS_POOL_OK                 0
+#define TF_OS_POOL_ERR_FULL           (-1)
+#define TF_OS_POOL_ERR_CALLBACK       (-2)
+#define TF_OS_POOL_ERR_HEAP           (-3)
+#define TF_OS_POOL_ERR_ALLOC          (-4)
+#define TF_OS_POOL_ERR_EMPTY          (-5)
+
 /* ========== 对外接口 ========== */
 
 /**
  * @brief 添加任务到队列（仅主循环内调用，ISR 中禁止）
  *
- * 将回调函数+参数推入 FIFO 队列。满时静默丢弃。
+ * 将回调函数和参数副本推入 FIFO 队列。
  *
  * @param callback  回调函数指针
- * @param arg       回调参数（可为 NULL）
- * @return          0=成功, -1=队列满
+ * @param arg       回调参数源地址（可为 NULL）
+ * @param arg_size  回调参数字节数，arg 为 NULL 或 arg_size 为 0 时不拷贝参数
+ * @return          0=成功，负数=失败
  */
-int8_t tf_os_soft_pool_task(void (*callback)(void *), void *arg);
+int8_t tf_os_soft_pool_task(void (*callback)(void *),
+                            const void *arg,
+                            uint16_t arg_size);
 
 #ifdef __cplusplus
 }

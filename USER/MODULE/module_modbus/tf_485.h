@@ -4,6 +4,7 @@
 #include "tf_485_master.h"
 #include "ringbuf.h"
 #include "tf_drv_dma.h"
+#include "tf_drv_io.h"
 #include "tf_drv_uart.h"
 
 #ifdef __cplusplus
@@ -28,7 +29,7 @@ extern "C" {
  *      （busy 标志在传输期间置位，防止并发）
  *
  *  物理配置：USART2 + DMA1（CH2=RX, CH4=TX），
- *            使用自动换向 TTL→RS485 电路，无需 GPIO 控制 DE/RE。
+ *            E_IO_485_CTRL 控制 RS485 芯片收发方向。
  * ─────────────────────────────────────────────────────────────────────
  */
 
@@ -40,6 +41,7 @@ extern "C" {
 typedef struct {
     tf_drv_uart_handle_t uart;  /**< USART 驱动句柄（当前固定为 USART2） */
     tf_drv_dma_handle_t dma;    /**< DMA 驱动句柄（当前固定为 DMA1）   */
+    tf_drv_io_handle_t ctrl;    /**< RS485 收发控制 IO 句柄             */
 } tf_485_hw_t;
 
 /**

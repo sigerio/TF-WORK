@@ -680,6 +680,16 @@
               <FilePath>..\USER\TASK\tf_usr_event_task.h</FilePath>
             </File>
             <File>
+              <FileName>tf_usr_time_task.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\USER\TASK\tf_usr_time_task.c</FilePath>
+            </File>
+            <File>
+              <FileName>tf_usr_time_task.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\USER\TASK\tf_usr_time_task.h</FilePath>
+            </File>
+            <File>
               <FileName>module_ws2812.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\USER\MODULE\module_ws2812\module_ws2812.c</FilePath>
