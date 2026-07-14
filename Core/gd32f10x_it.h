@@ -58,4 +58,6 @@ void PendSV_Handler(void);
 void SysTick_Handler(void);
 /* USART2 handle function */
 void USART2_IRQHandler(void);
+/* EXTI line 10 to EXTI line 15 handle function */
+void EXTI10_15_IRQHandler(void);
 #endif /* GD32F10X_IT_H */

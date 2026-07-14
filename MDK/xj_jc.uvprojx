@@ -340,7 +340,7 @@
               <MiscControls></MiscControls>
               <Define>GD32F10X_HD</Define>
               <Undefine></Undefine>
-              <IncludePath>..\CMSIS;..\GD32F10X\Include;..\TFSDK\config;..\TFSDK\hal;..\TFSDK\drv;..\TFSDK\framework;..\USER;..\USER\LIB;..\USER\TOOL;..\USER\TASK;..\USER\MODULE;..\USER\MODULE\module_ws2812;..\USER\MODULE\module_modbus</IncludePath>
+              <IncludePath>..\CMSIS;..\GD32F10X\Include;..\TFSDK\config;..\TFSDK\hal;..\TFSDK\drv;..\TFSDK\framework;..\USER;..\USER\LIB;..\USER\TOOL;..\USER\TASK;..\USER\MODULE;..\USER\MODULE\KEY;..\USER\MODULE\MOTO;..\USER\MODULE\module_ws2812;..\USER\MODULE\module_modbus</IncludePath>
             </VariousControls>
           </Cads>
           <Aads>
@@ -690,6 +690,31 @@
               <FilePath>..\USER\TASK\tf_usr_time_task.h</FilePath>
             </File>
             <File>
+              <FileName>key.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\USER\MODULE\KEY\key.c</FilePath>
+            </File>
+            <File>
+              <FileName>key.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\USER\MODULE\KEY\key.h</FilePath>
+            </File>
+            <File>
+              <FileName>key_event.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\USER\MODULE\KEY\key_event.c</FilePath>
+            </File>
+            <File>
+              <FileName>key_event.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\USER\MODULE\KEY\key_event.h</FilePath>
+            </File>
+            <File>
+              <FileName>tf_key_list.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\USER\MODULE\KEY\tf_key_list.h</FilePath>
+            </File>
+            <File>
               <FileName>module_ws2812.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\USER\MODULE\module_ws2812\module_ws2812.c</FilePath>
@@ -698,6 +723,46 @@
               <FileName>module_ws2812.h</FileName>
               <FileType>5</FileType>
               <FilePath>..\USER\MODULE\module_ws2812\module_ws2812.h</FilePath>
+            </File>
+            <File>
+              <FileName>module_moto.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\USER\MODULE\MOTO\module_moto.c</FilePath>
+            </File>
+            <File>
+              <FileName>module_moto.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\USER\MODULE\MOTO\module_moto.h</FilePath>
+            </File>
+            <File>
+              <FileName>module_moto_hall.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\USER\MODULE\MOTO\module_moto_hall.c</FilePath>
+            </File>
+            <File>
+              <FileName>module_moto_hall.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\USER\MODULE\MOTO\module_moto_hall.h</FilePath>
+            </File>
+            <File>
+              <FileName>module_moto_business.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\USER\MODULE\MOTO\module_moto_business.c</FilePath>
+            </File>
+            <File>
+              <FileName>module_moto_business.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\USER\MODULE\MOTO\module_moto_business.h</FilePath>
+            </File>
+            <File>
+              <FileName>module_moto_sync.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\USER\MODULE\MOTO\module_moto_sync.c</FilePath>
+            </File>
+            <File>
+              <FileName>module_moto_sync.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\USER\MODULE\MOTO\module_moto_sync.h</FilePath>
             </File>
             <File>
               <FileName>tf_485_master.c</FileName>

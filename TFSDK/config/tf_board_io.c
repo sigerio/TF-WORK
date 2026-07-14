@@ -129,20 +129,110 @@ tf_drv_io_config_t io_configs[E_IO_MAX] = {
     [E_IO_KEY_HELIPED] = {
         .port       = (uintptr_t)GPIOB,
         .pin        = GPIO_PIN_7,
-        .mode       = GPIO_MODE_IPD,
+        .mode       = GPIO_MODE_IPU,
         .speed      = GPIO_OSPEED_50MHZ,
     },
 
     [E_IO_KEY_DOOR] = {
         .port       = (uintptr_t)GPIOB,
         .pin        = GPIO_PIN_6,
-        .mode       = GPIO_MODE_IPD,
+        .mode       = GPIO_MODE_IPU,
         .speed      = GPIO_OSPEED_50MHZ,
     },
     [E_IO_KEY_EM_STOP] = {
         .port       = (uintptr_t)GPIOC,
         .pin        = GPIO_PIN_10,
-        .mode       = GPIO_MODE_IPD,
+        .mode       = GPIO_MODE_IPU,
+        .speed      = GPIO_OSPEED_50MHZ,
+    },
+    
+
+    [E_IO_HELIPED_CTRL1] = {
+        .port       = (uintptr_t)GPIOC,
+        .pin        = GPIO_PIN_7,
+        .mode       = GPIO_MODE_OUT_PP,
+        .speed      = GPIO_OSPEED_50MHZ,
+    },
+    [E_IO_HELIPED_CTRL2] = {
+        .port       = (uintptr_t)GPIOC,
+        .pin        = GPIO_PIN_6,
+        .mode       = GPIO_MODE_OUT_PP,
+        .speed      = GPIO_OSPEED_50MHZ,
+    },
+    [E_IO_HELIPED_FORW_FB] = {
+        .port       = (uintptr_t)GPIOC,
+        .pin        = GPIO_PIN_1,
+        .mode       = GPIO_MODE_IPU,
+        .speed      = GPIO_OSPEED_50MHZ,
+    },
+    [E_IO_HELIPED_BACK_FB] = {
+        .port       = (uintptr_t)GPIOC,
+        .pin        = GPIO_PIN_0,
+        .mode       = GPIO_MODE_IPU,
+        .speed      = GPIO_OSPEED_50MHZ,
+    },
+
+
+    [E_IO_DOOR0_CTRL1] = {
+        .port       = (uintptr_t)GPIOA,
+        .pin        = GPIO_PIN_0,
+        .mode       = GPIO_MODE_OUT_PP,
+        .speed      = GPIO_OSPEED_50MHZ,
+    },
+    [E_IO_DOOR0_CTRL2] = {
+        .port       = (uintptr_t)GPIOA,
+        .pin        = GPIO_PIN_1,
+        .mode       = GPIO_MODE_OUT_PP,
+        .speed      = GPIO_OSPEED_50MHZ,
+    },
+    [E_IO_DOOR0_FORW_FB] = {
+        .port       = (uintptr_t)GPIOB,
+        .pin        = GPIO_PIN_0,
+        .mode       = GPIO_MODE_IPU,
+        .speed      = GPIO_OSPEED_50MHZ,
+    },
+    [E_IO_DOOR0_BACK_FB] = {
+        .port       = (uintptr_t)GPIOB,
+        .pin        = GPIO_PIN_1,
+        .mode       = GPIO_MODE_IPU,
+        .speed      = GPIO_OSPEED_50MHZ,
+    },
+    [E_IO_DOOR0_HALL] = {
+        .port       = (uintptr_t)GPIOA,
+        .pin        = GPIO_PIN_15,
+        .mode       = GPIO_MODE_IPU,
+        .speed      = GPIO_OSPEED_50MHZ,
+    },
+
+
+    [E_IO_DOOR1_CTRL1] = {
+        .port       = (uintptr_t)GPIOD,
+        .pin        = GPIO_PIN_2,
+        .mode       = GPIO_MODE_OUT_PP,
+        .speed      = GPIO_OSPEED_50MHZ,
+    },
+    [E_IO_DOOR1_CTRL2] = {
+        .port       = (uintptr_t)GPIOC,
+        .pin        = GPIO_PIN_12,
+        .mode       = GPIO_MODE_OUT_PP,
+        .speed      = GPIO_OSPEED_50MHZ,
+    },
+    [E_IO_DOOR1_FORW_FB] = {
+        .port       = (uintptr_t)GPIOB,
+        .pin        = GPIO_PIN_8,
+        .mode       = GPIO_MODE_IPU,
+        .speed      = GPIO_OSPEED_50MHZ,
+    },
+    [E_IO_DOOR1_BACK_FB] = {
+        .port       = (uintptr_t)GPIOB,
+        .pin        = GPIO_PIN_9,
+        .mode       = GPIO_MODE_IPU,
+        .speed      = GPIO_OSPEED_50MHZ,
+    },
+    [E_IO_DOOR1_HALL] = {
+        .port       = (uintptr_t)GPIOC,
+        .pin        = GPIO_PIN_11,
+        .mode       = GPIO_MODE_IPU,
         .speed      = GPIO_OSPEED_50MHZ,
     },
 

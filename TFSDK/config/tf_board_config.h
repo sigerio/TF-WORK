@@ -59,11 +59,29 @@ typedef enum {
     E_IO_485_CTRL,      /* PA11 — RS485 DE/RE 收发控制 */
 
 
-    E_IO_KEY_HELIPED,   /*PB7 - 停机坪升降控制*/
+    E_IO_KEY_HELIPED,   /*PB7 - 停机坪前后运动控制*/
     E_IO_KEY_DOOR,      /*PB6 - 机巢门控制*/
     E_IO_KEY_EM_STOP,   /*PC10 - 急停检测*/
 
+    E_IO_HELIPED_CTRL1,     /*PC7  -  停机坪电机IN1控制脚*/
+    E_IO_HELIPED_CTRL2,     /*PC6  -  停机坪电机IN2控制脚*/
+    E_IO_HELIPED_FORW_FB,   /*PC1  -  停机坪前进位反馈信号*/
+    E_IO_HELIPED_BACK_FB,   /*PC0  -  停机坪后退位反馈信号*/
+    
+    E_IO_DOOR0_CTRL1,     /*PA0  -  门电机IN1控制脚*/
+    E_IO_DOOR0_CTRL2,     /*PA1  -  门电机IN1控制脚*/
+    E_IO_DOOR0_FORW_FB,     /*PB0  -  门电机前进位反馈信号*/
+    E_IO_DOOR0_BACK_FB,   /*PB1 -   门电机后退位反馈信号*/
+    E_IO_DOOR0_HALL,   /*PA15 -   门电机霍尔信号读取*/
 
+    E_IO_DOOR1_CTRL1,     /*PD2  -  门电机IN1控制脚*/
+    E_IO_DOOR1_CTRL2,     /*PC12  -  门电机IN1控制脚*/
+    E_IO_DOOR1_FORW_FB,     /*PB8  -  门电机前进位反馈信号*/
+    E_IO_DOOR1_BACK_FB,   /*PB9 -   门电机后退位反馈信号*/
+    E_IO_DOOR1_HALL,   /*PC11 -   门电机霍尔信号读取*/
+    
+    
+    
     E_IO_MAX
 } tf_drv_io_id_e;
 

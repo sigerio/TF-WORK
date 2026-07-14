@@ -34,6 +34,7 @@ OF SUCH DAMAGE.
 
 #include "gd32f10x_it.h"
 #include "../USER/MODULE/module_modbus/tf_485_master.h"
+#include "../USER/MODULE/MOTO/module_moto_hall.h"
 
 extern void tf_delay_systick_irq_handler(void);
 
@@ -152,4 +153,11 @@ void SysTick_Handler(void)
 void USART2_IRQHandler(void)
 {
     tf_485_usart2_irq();
+}
+
+void EXTI10_15_IRQHandler(void)
+{
+#if MODULE_MOTO_HALL_ENABLE
+    module_moto_hall_exti10_15_irq_handler();
+#endif
 }

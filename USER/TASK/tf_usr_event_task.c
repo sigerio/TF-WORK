@@ -6,15 +6,9 @@
 #include "../MODULE/module_modbus/tf_485_xm8189.h"
 #include "../MODULE/module_modbus/tf_485_xm8537.h"
 #include "../MODULE/module_modbus/tf_485_xm9505.h"
+#include "../MODULE/KEY/key_event.h"
 #include "tf_debug.h"
 
-#ifndef MODULE_MODBUS_XM8189_ADDR
-#define MODULE_MODBUS_XM8189_ADDR              2U
-#endif
-
-#ifndef TF_USR_EVENT_TASK_PRIORITY
-#define TF_USR_EVENT_TASK_PRIORITY             20U
-#endif
 
 typedef struct {
     uint8_t slave_addr;
@@ -142,26 +136,38 @@ static void tf_usr_485_ac_param_write_cb(void *arg)
     }
 }
 
+
+static void tf_usr_key_event_c(void *arg)
+{
+    (void)arg;
+    tf_key_event_callback();
+}
+
+
 void tf_usr_event_task_init(void)
 {
-    tf_os_soft_event_task(TF_USR_EVENT_MODBUS_XM7828_WRITE,
+    tf_os_soft_event_task(TF_USR_EVENT_485_XM7828_WRITE,
                           tf_usr_485_xm7828_write_cb,
                           20);
-    tf_os_soft_event_task(TF_USR_EVENT_MODBUS_XM8189_WRITE,
+    tf_os_soft_event_task(TF_USR_EVENT_485_XM8189_WRITE,
                           tf_usr_485_xm8189_write_cb,
                           20);
-    tf_os_soft_event_task(TF_USR_EVENT_MODBUS_XM8537_WRITE,
+    tf_os_soft_event_task(TF_USR_EVENT_485_XM8537_WRITE,
                           tf_usr_485_xm8537_write_cb,
                           20);
-    tf_os_soft_event_task(TF_USR_EVENT_MODBUS_XM9505_WRITE,
+    tf_os_soft_event_task(TF_USR_EVENT_485_XM9505_WRITE,
                           tf_usr_485_xm9505_write_cb,
                           20);
-    tf_os_soft_event_task(TF_USR_EVENT_MODBUS_AC_STATUS_WRITE,
+    tf_os_soft_event_task(TF_USR_EVENT_485_AC_STATUS_WRITE,
                           tf_usr_485_ac_status_write_cb,
                           20);
-    tf_os_soft_event_task(TF_USR_EVENT_MODBUS_AC_PARAM_WRITE,
+    tf_os_soft_event_task(TF_USR_EVENT_485_AC_PARAM_WRITE,
                           tf_usr_485_ac_param_write_cb,
                           20);
+
+    tf_os_soft_event_task(TF_USR_EVENT_KEY_TRIG,
+                          tf_usr_key_event_c,
+                          0);
 }
 
 
