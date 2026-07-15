@@ -2,6 +2,7 @@
 #include "../USER/MODULE/KEY/key.h"
 #include "../USER/MODULE/MOTO/module_moto.h"
 #include "../USER/MODULE/MOTO/module_moto_hall.h"
+#include "../USER/MODULE/MOTO/module_moto_sync.h"
 #include "../USER/MODULE/module_modbus/tf_485_master.h"
 #include "../USER/TASK/tf_usr_event_task.h"
 #include "../USER/TASK/tf_usr_time_task.h"
@@ -13,6 +14,7 @@ int main(void)
     tf_485_master_init();
     tf_key_init();
     module_moto_init();
+    module_moto_sync_init();
 #if MODULE_MOTO_HALL_ENABLE
     module_moto_hall_init();
 #endif

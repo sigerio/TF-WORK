@@ -17,6 +17,10 @@ void module_moto_business_request_heliped_retract(void);
 void module_moto_business_toggle_door(void);
 void module_moto_business_toggle_heliped(void);
 
+/* 急停控制（仅为软件门控，不切入硬件急停回路） */
+void module_moto_business_estop_activate(void);
+void module_moto_business_estop_release(void);
+
 void module_moto_business_update(void);
 
 #ifdef __cplusplus

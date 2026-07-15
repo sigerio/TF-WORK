@@ -30,10 +30,15 @@ static void tf_key_scan_timer_task(void *arg)
     tf_key_info_t key_info;
 
     tf_key_scan_task(cycle_ms);
+    (void)tf_os_event_trigger(TF_USR_EVENT_EM_STOP, 0, 0U, 1U);
 
     key_info = tf_key_get_info();
 
     for (int i = 0; i < TF_KEY_ID_COUNT; i++) {
+        if (i == TF_KEY_ID_EM_STOP) {
+            continue;
+        }
+
         if (key_info.key_event[i] != TF_KEY_EVENT_RESET) {
             (void)tf_os_event_trigger(TF_USR_EVENT_KEY_TRIG, 0, 0U, 1U);
             return;

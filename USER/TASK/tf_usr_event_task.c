@@ -6,7 +6,9 @@
 #include "../MODULE/module_modbus/tf_485_xm8189.h"
 #include "../MODULE/module_modbus/tf_485_xm8537.h"
 #include "../MODULE/module_modbus/tf_485_xm9505.h"
+#include "../MODULE/KEY/key.h"
 #include "../MODULE/KEY/key_event.h"
+#include "../MODULE/MOTO/module_moto_business.h"
 #include "tf_debug.h"
 
 
@@ -143,6 +145,20 @@ static void tf_usr_key_event_c(void *arg)
     tf_key_event_callback();
 }
 
+static void tf_usr_em_stop_event_cb(void *arg)
+{
+    (void)arg;
+
+    if (tf_key_is_pressed_now(TF_KEY_ID_EM_STOP))
+    {
+        module_moto_business_estop_activate();
+    }
+    else
+    {
+        module_moto_business_estop_release();
+    }
+}
+
 
 void tf_usr_event_task_init(void)
 {
@@ -165,9 +181,12 @@ void tf_usr_event_task_init(void)
                           tf_usr_485_ac_param_write_cb,
                           20);
 
+    tf_os_soft_event_task(TF_USR_EVENT_EM_STOP,
+                          tf_usr_em_stop_event_cb,
+                          0);
     tf_os_soft_event_task(TF_USR_EVENT_KEY_TRIG,
                           tf_usr_key_event_c,
-                          0);
+                          1);
 }
 
 

@@ -90,6 +90,10 @@ static axis_ctx_t heliped_axis = {
     .idle_fault_con = true,
 };
 
+/* ============================ 模块状态 ============================ */
+
+static bool estop_active;
+
 /* ============================ 通用引擎 ============================ */
 
 /* 反向防抖计时推进一周期，到点清零并返回 true */
@@ -270,41 +274,84 @@ static void axis_update(axis_ctx_t *a, const module_moto_run_status_t *s)
 
 void module_moto_business_request_door_open(void)
 {
+    if (estop_active) return;
     axis_request_fwd(&door_axis);
 }
 
 void module_moto_business_request_door_close(void)
 {
+    if (estop_active) return;
     axis_request_con(&door_axis);
 }
 
 void module_moto_business_request_heliped_extend(void)
 {
+    if (estop_active) return;
     axis_request_con(&heliped_axis);
 }
 
 void module_moto_business_request_heliped_retract(void)
 {
+    if (estop_active) return;
     axis_request_fwd(&heliped_axis);
 }
 
 void module_moto_business_toggle_door(void)
 {
+    if (estop_active) return;
     axis_toggle(&door_axis);
 }
 
 void module_moto_business_toggle_heliped(void)
 {
+    if (estop_active) return;
     axis_toggle(&heliped_axis);
+}
+
+void module_moto_business_estop_activate(void)
+{
+    if (estop_active) return;
+    estop_active = true;
+    module_moto_sync_stop_door();
+    module_moto_sync_stop_heliped();
+}
+
+void module_moto_business_estop_release(void)
+{
+    if (!estop_active) return;
+    estop_active = false;
+    door_axis.phase = AXIS_OVER;
+    door_axis.reverse_wait_ms = 0U;
+    heliped_axis.phase = AXIS_OVER;
+    heliped_axis.reverse_wait_ms = 0U;
 }
 
 void module_moto_business_update(void)
 {
     module_moto_run_status_t run_status;
 
+    if (estop_active) return;
+
     module_moto_sync_get_run_status(&run_status);
 
     /* 门轴先更新：其相位变化会被同周期停机坪轴的前置判断读取 */
-    axis_update(&door_axis, &run_status);
-    axis_update(&heliped_axis, &run_status);
+    if (run_status.door == MODULE_MOTO_DOOR_STATE_FAULT)
+    {
+        door_axis.phase = AXIS_OVER;
+        door_axis.reverse_wait_ms = 0U;
+    }
+    else
+    {
+        axis_update(&door_axis, &run_status);
+    }
+
+    if (run_status.heliped == MODULE_MOTO_HELIPED_STATE_FAULT)
+    {
+        heliped_axis.phase = AXIS_OVER;
+        heliped_axis.reverse_wait_ms = 0U;
+    }
+    else
+    {
+        axis_update(&heliped_axis, &run_status);
+    }
 }

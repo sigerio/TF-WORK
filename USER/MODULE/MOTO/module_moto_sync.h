@@ -20,10 +20,11 @@ extern "C" {
 
 /**
  * 门业务运行状态（相对机库流程，不直接映射电机 DIR/POS）。
- * - CLOSED    : 门已关
- * - OPENED    : 门已开（全开到位）
- * - SAFE_OPEN : 预留安全开门状态，当前未使用
- * - FAULT     : 门故障
+ * - CLOSED       : 门已关
+ * - OPENED       : 门已开（全开到位）
+ * - SAFE_OPEN    : 预留安全开门状态，当前未使用
+ * - FAULT        : 门故障
+ * - INTERMEDIATE : 未处于完整开门或关门终态
  */
 typedef enum
 {
@@ -31,6 +32,7 @@ typedef enum
     MODULE_MOTO_DOOR_STATE_CLOSED,
     MODULE_MOTO_DOOR_STATE_SAFE_OPEN,
     MODULE_MOTO_DOOR_STATE_OPENED,
+    MODULE_MOTO_DOOR_STATE_INTERMEDIATE,
 } module_moto_door_state_e;
 
 /**
@@ -38,6 +40,7 @@ typedef enum
  * - EXTENDED     : 完全伸出
  * - RETRACTED    : 完全归位
  * - SAFE_RETRACT : 预留安全回收状态，当前未使用
+ * - INTERMEDIATE : 未处于完全伸出或完全归位终态
  */
 typedef enum
 {
@@ -45,6 +48,7 @@ typedef enum
     MODULE_MOTO_HELIPED_STATE_EXTENDED,
     MODULE_MOTO_HELIPED_STATE_SAFE_RETRACT,
     MODULE_MOTO_HELIPED_STATE_RETRACTED,
+    MODULE_MOTO_HELIPED_STATE_INTERMEDIATE,
 } module_moto_heliped_state_e;
 
 /**
@@ -57,6 +61,9 @@ typedef struct
     module_moto_door_state_e door;
     module_moto_heliped_state_e heliped;
 } module_moto_run_status_t;
+
+/** 在电机模块初始化完成后，根据当前限位建立业务运行状态。 */
+void module_moto_sync_init(void);
 
 /**
  * @brief  读取门 / 停机坪业务运行状态。

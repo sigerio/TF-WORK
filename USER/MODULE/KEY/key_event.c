@@ -33,10 +33,6 @@ static void tf_key_door_long_repeat_event(void)
 {
 }
 
-static void tf_key_em_stop_long_event(void)
-{
-}
-
 void tf_key_event_callback(void)
 {
     tf_key_info_t key_info = tf_key_get_info();
@@ -68,10 +64,5 @@ void tf_key_event_callback(void)
     default:
         break;
     }
-
-    if (key_info.key_event[TF_KEY_ID_EM_STOP] == TF_KEY_EVENT_LONG) {
-        tf_key_em_stop_long_event();
-    }
-
     tf_key_clear_event();
 }

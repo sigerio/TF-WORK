@@ -3,8 +3,6 @@
 #include <string.h>
 
 #include "tf_drv_io.h"
-#include "../../TASK/tf_usr_event_task.h"
-#include "../../../TFSDK/framework/os/tf_os.h"
 
 #define TF_KEY_ACTIVE_LEVEL_HELIPED 0U
 #define TF_KEY_ACTIVE_LEVEL_DOOR 0U
@@ -25,7 +23,6 @@ tf_key_info_t g_tf_key_info = {0};
 static uint16_t s_key_pressed_bitmap;
 static bool s_key_scan_ready;
 static bool s_key_inited;
-static bool key_event_report = false;
 static tf_drv_io_handle_t s_key_handles[TF_KEY_ID_COUNT];
 
 static const tf_key_hw_config_t s_key_hw_configs[TF_KEY_ID_COUNT] = {
@@ -136,30 +133,6 @@ static void tf_key_scan_state(uint16_t now_key, uint32_t cycle_ms)
     last_key_bitmap = now_key;
 }
 
-static void tf_key_scan_em_stop_state(uint32_t cycle_ms)
-{
-    uint8_t pressed = tf_key_read_pressed(TF_KEY_ID_EM_STOP);
-
-    if (pressed != 0U) {
-        uint16_t prev_time = g_tf_key_info.key_time[TF_KEY_ID_EM_STOP];
-
-        g_tf_key_info.key_state[TF_KEY_ID_EM_STOP] = 1U;
-        g_tf_key_info.key_time[TF_KEY_ID_EM_STOP] =
-            tf_key_elapsed_add(g_tf_key_info.key_time[TF_KEY_ID_EM_STOP],
-                               cycle_ms);
-
-        if ((prev_time < TF_KEY_SHORT_MIN_MS) &&
-            (g_tf_key_info.key_time[TF_KEY_ID_EM_STOP] >=
-             TF_KEY_SHORT_MIN_MS)) {
-            g_tf_key_info.key_event[TF_KEY_ID_EM_STOP] = TF_KEY_EVENT_LONG;
-        }
-    } else {
-        g_tf_key_info.key_state[TF_KEY_ID_EM_STOP] = 0U;
-        g_tf_key_info.key_time[TF_KEY_ID_EM_STOP] = 0U;
-        g_tf_key_info.key_event[TF_KEY_ID_EM_STOP] = TF_KEY_EVENT_RESET;
-    }
-}
-
 bool tf_key_init(void)
 {
     bool ok = true;
@@ -195,8 +168,6 @@ void tf_key_scan_task(uint32_t cycle_ms)
 {
     uint16_t now_key;
 
-    tf_key_scan_em_stop_state(cycle_ms);
-
     now_key = tf_key_get_pressed_bitmap();
     if ((now_key == 0U) && (!s_key_scan_ready)) {
         s_key_scan_ready = true;
@@ -207,21 +178,6 @@ void tf_key_scan_task(uint32_t cycle_ms)
     }
 
     tf_key_scan_state(now_key, cycle_ms);
-
-
-    for(int i = 0; i<TF_KEY_ID_COUNT ; i++)
-    {
-        if(TF_KEY_EVENT_RESET != g_tf_key_info.key_event[i])
-        {
-            if(!key_event_report)
-            {
-                (void)tf_os_event_trigger(TF_USR_EVENT_KEY_TRIG, 0, 0U, 1U);
-                key_event_report = true;
-            }
-            break;
-        }
-    }
-
 }
 
 
@@ -251,7 +207,6 @@ void tf_key_clear_event(void)
         g_tf_key_info.key_state[i] = 0U;
         g_tf_key_info.key_event[i] = TF_KEY_EVENT_RESET;
     }
-    key_event_report = false;
 }
 
 bool tf_key_is_active(tf_key_id_t key)

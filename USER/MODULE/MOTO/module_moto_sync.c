@@ -45,6 +45,7 @@ typedef struct
     module_moto_dir_e direction;          /* 目标运行方向 */
     module_moto_pos_e target_position;    /* 目标到位位置（限位反馈） */
     motion_error_e motion_error;          /* 本次动作保留的错误信息 */
+    uint8_t start_err_cnt;                /* 本次尝试内连续启动失败次数 */
 } motion_context_t;
 
 #if MODULE_MOTO_HALL_ENABLE && MODULE_MOTO_DOOR_SYNC_ENABLE
@@ -62,6 +63,7 @@ static motion_context_t door_motion = {
     .direction = MODULE_MOTO_DIR_STOP,
     .target_position = MODULE_MOTO_POS_NONE,
     .motion_error = MOTION_ERROR_NONE,
+    .start_err_cnt = 0U,
 };
 
 /* 停机坪单电机运动上下文，默认空闲 */
@@ -70,6 +72,7 @@ static motion_context_t heliped_motion = {
     .direction = MODULE_MOTO_DIR_STOP,
     .target_position = MODULE_MOTO_POS_NONE,
     .motion_error = MOTION_ERROR_NONE,
+    .start_err_cnt = 0U,
 };
 
 #if MODULE_MOTO_HALL_ENABLE && MODULE_MOTO_DOOR_SYNC_ENABLE
@@ -78,21 +81,69 @@ static door_motor_block_monitor_t door0_block_monitor;
 static door_motor_block_monitor_t door1_block_monitor;
 #endif
 
-/*
- * 门 / 停机坪业务运行状态。
- * 仅记录业务语义，供编排层读取；默认按“关到位 / 归位”上电假设，
- * 后续由状态刷新逻辑按限位 / 安全位 / 故障更新。
- */
-static module_moto_run_status_t run_status = {
-    .door = MODULE_MOTO_DOOR_STATE_CLOSED,
-    .heliped = MODULE_MOTO_HELIPED_STATE_RETRACTED,
-};
+/* 门 / 停机坪业务运行状态，由 sync 初始化和运动流程维护。 */
+static module_moto_run_status_t run_status;
 
 /** 同时停止两扇门电机 */
 static void stop_door_motors(void)
 {
     (void)module_moto_stop(DOOR0_MOTOR_ID);
     (void)module_moto_stop(DOOR1_MOTOR_ID);
+}
+
+/** 根据双门当前限位刷新门组业务状态。 */
+static void refresh_door_run_status(void)
+{
+    module_moto_pos_e door0_position;
+    module_moto_pos_e door1_position;
+
+    door0_position = module_moto_get_position(DOOR0_MOTOR_ID);
+    door1_position = module_moto_get_position(DOOR1_MOTOR_ID);
+
+    if ((door0_position == MODULE_MOTO_POS_ERROR) ||
+        (door1_position == MODULE_MOTO_POS_ERROR))
+    {
+        run_status.door = MODULE_MOTO_DOOR_STATE_FAULT;
+    }
+    else if ((door0_position == MODULE_MOTO_POS_FORWARD) &&
+             (door1_position == MODULE_MOTO_POS_FORWARD))
+    {
+        run_status.door = MODULE_MOTO_DOOR_STATE_OPENED;
+    }
+    else if ((door0_position == MODULE_MOTO_POS_BACKWARD) &&
+             (door1_position == MODULE_MOTO_POS_BACKWARD))
+    {
+        run_status.door = MODULE_MOTO_DOOR_STATE_CLOSED;
+    }
+    else
+    {
+        run_status.door = MODULE_MOTO_DOOR_STATE_INTERMEDIATE;
+    }
+}
+
+/** 根据停机坪当前限位刷新业务状态。 */
+static void refresh_heliped_run_status(void)
+{
+    module_moto_pos_e heliped_position;
+
+    heliped_position = module_moto_get_position(HELIPED_MOTOR_ID);
+
+    if (heliped_position == MODULE_MOTO_POS_ERROR)
+    {
+        run_status.heliped = MODULE_MOTO_HELIPED_STATE_FAULT;
+    }
+    else if (heliped_position == MODULE_MOTO_POS_FORWARD)
+    {
+        run_status.heliped = MODULE_MOTO_HELIPED_STATE_EXTENDED;
+    }
+    else if (heliped_position == MODULE_MOTO_POS_BACKWARD)
+    {
+        run_status.heliped = MODULE_MOTO_HELIPED_STATE_RETRACTED;
+    }
+    else
+    {
+        run_status.heliped = MODULE_MOTO_HELIPED_STATE_INTERMEDIATE;
+    }
 }
 
 #if MODULE_MOTO_HALL_ENABLE && MODULE_MOTO_DOOR_SYNC_ENABLE
@@ -147,12 +198,19 @@ static bool door_motor_block_timed_out(
  */
 static motion_phase_e start_door_motion(void)
 {
-    static uint8_t err_cnt = 0;
     module_moto_pos_e door0_position;
     module_moto_pos_e door1_position;
 
     door0_position = module_moto_get_position(DOOR0_MOTOR_ID);
     door1_position = module_moto_get_position(DOOR1_MOTOR_ID);
+
+    if ((door0_position == MODULE_MOTO_POS_ERROR) ||
+        (door1_position == MODULE_MOTO_POS_ERROR))
+    {
+        stop_door_motors();
+        run_status.door = MODULE_MOTO_DOOR_STATE_FAULT;
+        return MOTION_ERR;
+    }
 
     /* 双门均已在目标：无需动作 */
     if ((door0_position == door_motion.target_position) &&
@@ -202,18 +260,19 @@ static motion_phase_e start_door_motion(void)
 
         if (!door0_started || !door1_started)
         {
-            err_cnt++;
+            door_motion.start_err_cnt++;
             stop_door_motors();
         }
         else
         {
-            err_cnt = 0;
+            door_motion.start_err_cnt = 0U;
+            run_status.door = MODULE_MOTO_DOOR_STATE_INTERMEDIATE;
             return MOTION_ING;
         }
 
-        if(err_cnt >= 3)
+        if (door_motion.start_err_cnt >= 3U)
         {
-            err_cnt = 0;
+            door_motion.start_err_cnt = 0U;
             door_motion.motion_error = MOTION_ERROR_DOOR_START_FAILED;
             return MOTION_ERR;
         }
@@ -246,6 +305,14 @@ static motion_phase_e update_door_motion(void)
 
     door0_position = module_moto_get_position(DOOR0_MOTOR_ID);
     door1_position = module_moto_get_position(DOOR1_MOTOR_ID);
+
+    if ((door0_position == MODULE_MOTO_POS_ERROR) ||
+        (door1_position == MODULE_MOTO_POS_ERROR))
+    {
+        stop_door_motors();
+        run_status.door = MODULE_MOTO_DOOR_STATE_FAULT;
+        return MOTION_ERR;
+    }
 
     /* 双门均到达目标限位 */
     if ((door0_position == door_motion.target_position) &&
@@ -357,8 +424,18 @@ static motion_phase_e update_door_motion(void)
  */
 static motion_phase_e start_heliped_motion(void)
 {
-    static uint8_t err_cnt = 0;
-    if (module_moto_get_position(HELIPED_MOTOR_ID) == heliped_motion.target_position)
+    module_moto_pos_e heliped_position;
+
+    heliped_position = module_moto_get_position(HELIPED_MOTOR_ID);
+
+    if (heliped_position == MODULE_MOTO_POS_ERROR)
+    {
+        (void)module_moto_stop(HELIPED_MOTOR_ID);
+        run_status.heliped = MODULE_MOTO_HELIPED_STATE_FAULT;
+        return MOTION_ERR;
+    }
+
+    if (heliped_position == heliped_motion.target_position)
     {
         (void)module_moto_stop(HELIPED_MOTOR_ID);
 
@@ -377,17 +454,18 @@ static motion_phase_e start_heliped_motion(void)
     if (!module_moto_start(HELIPED_MOTOR_ID, heliped_motion.direction))
     {
         (void)module_moto_stop(HELIPED_MOTOR_ID);
-        err_cnt++;
+        heliped_motion.start_err_cnt++;
     }
     else
     {
-        err_cnt = 0;
+        heliped_motion.start_err_cnt = 0U;
+        run_status.heliped = MODULE_MOTO_HELIPED_STATE_INTERMEDIATE;
         return MOTION_ING;
     }
 
-    if(err_cnt >= 3)
+    if(heliped_motion.start_err_cnt >= 3U)
     {
-        err_cnt = 0;
+        heliped_motion.start_err_cnt = 0U;
         heliped_motion.motion_error = MOTION_ERROR_HELIPED_START_FAILED;
         return MOTION_ERR;
     }
@@ -402,7 +480,18 @@ static motion_phase_e start_heliped_motion(void)
  */
 static motion_phase_e update_heliped_motion(void)
 {
-    if (module_moto_get_position(HELIPED_MOTOR_ID) != heliped_motion.target_position)
+    module_moto_pos_e heliped_position;
+
+    heliped_position = module_moto_get_position(HELIPED_MOTOR_ID);
+
+    if (heliped_position == MODULE_MOTO_POS_ERROR)
+    {
+        (void)module_moto_stop(HELIPED_MOTOR_ID);
+        run_status.heliped = MODULE_MOTO_HELIPED_STATE_FAULT;
+        return MOTION_ERR;
+    }
+
+    if (heliped_position != heliped_motion.target_position)
     {
         return MOTION_ING;
     }
@@ -474,6 +563,12 @@ static motion_phase_e handle_heliped_motion_error(void)
     }
 }
 
+void module_moto_sync_init(void)
+{
+    refresh_door_run_status();
+    refresh_heliped_run_status();
+}
+
 void module_moto_sync_get_run_status(module_moto_run_status_t *status)
 {
     if (status == 0)
@@ -491,6 +586,8 @@ void module_moto_sync_stop_door(void)
     door_motion.direction = MODULE_MOTO_DIR_STOP;
     door_motion.target_position = MODULE_MOTO_POS_NONE;
     door_motion.motion_error = MOTION_ERROR_NONE;
+    door_motion.start_err_cnt = 0U;
+    refresh_door_run_status();
 }
 
 void module_moto_sync_stop_heliped(void)
@@ -500,6 +597,8 @@ void module_moto_sync_stop_heliped(void)
     heliped_motion.direction = MODULE_MOTO_DIR_STOP;
     heliped_motion.target_position = MODULE_MOTO_POS_NONE;
     heliped_motion.motion_error = MOTION_ERROR_NONE;
+    heliped_motion.start_err_cnt = 0U;
+    refresh_heliped_run_status();
 }
 
 void module_moto_sync_request_door_open(void)
@@ -508,6 +607,7 @@ void module_moto_sync_request_door_open(void)
     door_motion.direction = MODULE_MOTO_DIR_FORWARD;
     door_motion.target_position = MODULE_MOTO_POS_FORWARD;
     door_motion.motion_error = MOTION_ERROR_NONE;
+    door_motion.start_err_cnt = 0U;
 }
 
 void module_moto_sync_request_door_close(void)
@@ -516,6 +616,7 @@ void module_moto_sync_request_door_close(void)
     door_motion.direction = MODULE_MOTO_DIR_BACKWARD;
     door_motion.target_position = MODULE_MOTO_POS_BACKWARD;
     door_motion.motion_error = MOTION_ERROR_NONE;
+    door_motion.start_err_cnt = 0U;
 }
 
 void module_moto_sync_request_heliped_extend(void)
@@ -524,6 +625,7 @@ void module_moto_sync_request_heliped_extend(void)
     heliped_motion.direction = MODULE_MOTO_DIR_FORWARD;
     heliped_motion.target_position = MODULE_MOTO_POS_FORWARD;
     heliped_motion.motion_error = MOTION_ERROR_NONE;
+    heliped_motion.start_err_cnt = 0U;
 }
 
 void module_moto_sync_request_heliped_retract(void)
@@ -532,6 +634,7 @@ void module_moto_sync_request_heliped_retract(void)
     heliped_motion.direction = MODULE_MOTO_DIR_BACKWARD;
     heliped_motion.target_position = MODULE_MOTO_POS_BACKWARD;
     heliped_motion.motion_error = MOTION_ERROR_NONE;
+    heliped_motion.start_err_cnt = 0U;
 }
 
 void module_moto_sync_update(void)
