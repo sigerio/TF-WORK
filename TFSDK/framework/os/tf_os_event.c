@@ -12,7 +12,7 @@
 #include <string.h>
  
 #include "../tf_debug.h"
-#include "../../../USER/LIB/heap_4.h"
+#include "../../lib/heap_4.h"
 
 /* ========== 内部数据结构 ========== */
 

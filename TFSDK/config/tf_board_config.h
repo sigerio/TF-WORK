@@ -161,14 +161,14 @@ typedef enum {
 } tf_drv_dma_id_e;
 
 typedef enum {
-    E_DRV_D0_NONE = -1,
-    E_DRV_D0_CH1,
-    E_DRV_D0_CH2,
-    E_DRV_D0_CH3,
-    E_DRV_D0_CH4,
-    E_DRV_D0_CH5,
-    E_DRV_D0_CH6,
-    E_DRV_D0_MAX
+    E_DRV_DX_NONE = -1,
+    E_DRV_DX_CH1,
+    E_DRV_DX_CH2,
+    E_DRV_DX_CH3,
+    E_DRV_DX_CH4,
+    E_DRV_DX_CH5,
+    E_DRV_DX_CH6,
+    E_DRV_DX_MAX
 } tf_drv_dma_ch_id_e;
 
 /* ========== RTC ========== */

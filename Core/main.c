@@ -4,6 +4,7 @@
 #include "../USER/MODULE/MOTO/module_moto_hall.h"
 #include "../USER/MODULE/MOTO/module_moto_sync.h"
 #include "../USER/MODULE/module_modbus/tf_485_master.h"
+#include "../USER/MODULE/module_ws2812/module_ws2812.h"
 #include "../USER/TASK/tf_usr_event_task.h"
 #include "../USER/TASK/tf_usr_time_task.h"
 #include "../TFSDK/framework/os/tf_os.h"
@@ -11,6 +12,7 @@
 int main(void)
 {
     use_uart_and_dma();
+    module_ws2812_init();
     tf_485_master_init();
     tf_key_init();
     module_moto_init();

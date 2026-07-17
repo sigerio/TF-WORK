@@ -9,6 +9,7 @@
 #include "../MODULE/KEY/key.h"
 #include "../MODULE/KEY/key_event.h"
 #include "../MODULE/MOTO/module_moto_business.h"
+#include "../MODULE/module_ws2812/module_ws2812_status.h"
 #include "tf_debug.h"
 
 
@@ -160,6 +161,29 @@ static void tf_usr_em_stop_event_cb(void *arg)
 }
 
 
+static void tf_usr_door_state_event_cb(void *arg)
+{
+    const door_running_in_e *running = (const door_running_in_e *)arg;
+
+    if (running == 0) {
+        return;
+    }
+
+    set_door_running_in(*running);
+}
+
+static void tf_usr_heliped_state_event_cb(void *arg)
+{
+    const heliped_running_in_e *running = (const heliped_running_in_e *)arg;
+
+    if (running == 0) {
+        return;
+    }
+
+    set_heliped_running_in(*running);
+}
+
+
 void tf_usr_event_task_init(void)
 {
     tf_os_soft_event_task(TF_USR_EVENT_485_XM7828_WRITE,
@@ -187,6 +211,12 @@ void tf_usr_event_task_init(void)
     tf_os_soft_event_task(TF_USR_EVENT_KEY_TRIG,
                           tf_usr_key_event_c,
                           1);
+    tf_os_soft_event_task(TF_USR_EVENT_DOOR_STATE,
+                          tf_usr_door_state_event_cb,
+                          2);
+    tf_os_soft_event_task(TF_USR_EVENT_HELIPED_STATE,
+                          tf_usr_heliped_state_event_cb,
+                          2);
 }
 
 

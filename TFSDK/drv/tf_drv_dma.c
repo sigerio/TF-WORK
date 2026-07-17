@@ -28,15 +28,15 @@ static bool dma_registered[E_DRV_DMA_MAX];
 /**
  * @brief 获取有效通道数量
  *
- * channel_count == 0 表示使用当前资源枚举上限 E_DRV_D0_MAX。
+ * channel_count == 0 表示使用当前资源枚举上限 E_DRV_DX_MAX。
  */
 static uint8_t dma_channel_capacity(const tf_drv_dma_config_t *cfg)
 {
     if (cfg == NULL) {
-        return E_DRV_D0_MAX;
+        return E_DRV_DX_MAX;
     }
-    if (cfg->channel_count == 0 || cfg->channel_count > E_DRV_D0_MAX) {
-        return E_DRV_D0_MAX;
+    if (cfg->channel_count == 0 || cfg->channel_count > E_DRV_DX_MAX) {
+        return E_DRV_DX_MAX;
     }
     return cfg->channel_count;
 }

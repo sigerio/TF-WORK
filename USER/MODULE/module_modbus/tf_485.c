@@ -14,8 +14,8 @@
 
 #define TF_485_UART_ID      E_DRV_UART_2
 #define TF_485_DMA_ID       E_DRV_DMA_1
-#define TF_485_RX_DMA_CH    E_DRV_D0_CH2
-#define TF_485_TX_DMA_CH    E_DRV_D0_CH4
+#define TF_485_RX_DMA_CH    E_DRV_DX_CH2
+#define TF_485_TX_DMA_CH    E_DRV_DX_CH4
 #define TF_485_CTRL_RX      0U
 #define TF_485_CTRL_TX      1U
 

@@ -340,7 +340,7 @@
               <MiscControls></MiscControls>
               <Define>GD32F10X_HD</Define>
               <Undefine></Undefine>
-              <IncludePath>..\CMSIS;..\GD32F10X\Include;..\TFSDK\config;..\TFSDK\hal;..\TFSDK\drv;..\TFSDK\framework;..\USER;..\USER\LIB;..\USER\TOOL;..\USER\TASK;..\USER\MODULE;..\USER\MODULE\KEY;..\USER\MODULE\MOTO;..\USER\MODULE\module_ws2812;..\USER\MODULE\module_modbus</IncludePath>
+              <IncludePath>..\CMSIS;..\GD32F10X\Include;..\TFSDK\config;..\TFSDK\hal;..\TFSDK\drv;..\TFSDK\framework;..\TFSDK\lib;..\USER;..\USER\LIB;..\USER\TOOL;..\USER\TASK;..\USER\MODULE;..\USER\MODULE\KEY;..\USER\MODULE\MOTO;..\USER\MODULE\module_ws2812;..\USER\MODULE\module_modbus</IncludePath>
             </VariousControls>
           </Cads>
           <Aads>
@@ -652,6 +652,21 @@
           </Files>
         </Group>
         <Group>
+          <GroupName>TFSDK/Lib</GroupName>
+          <Files>
+            <File>
+              <FileName>heap_4.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\TFSDK\lib\heap_4.c</FilePath>
+            </File>
+            <File>
+              <FileName>heap_4.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\TFSDK\lib\heap_4.h</FilePath>
+            </File>
+          </Files>
+        </Group>
+        <Group>
           <GroupName>USER</GroupName>
           <Files>
             <File>
@@ -723,6 +738,26 @@
               <FileName>module_ws2812.h</FileName>
               <FileType>5</FileType>
               <FilePath>..\USER\MODULE\module_ws2812\module_ws2812.h</FilePath>
+            </File>
+            <File>
+              <FileName>module_ws2812_effect.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\USER\MODULE\module_ws2812\module_ws2812_effect.c</FilePath>
+            </File>
+            <File>
+              <FileName>module_ws2812_effect.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\USER\MODULE\module_ws2812\module_ws2812_effect.h</FilePath>
+            </File>
+            <File>
+              <FileName>module_ws2812_status.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\USER\MODULE\module_ws2812\module_ws2812_status.c</FilePath>
+            </File>
+            <File>
+              <FileName>module_ws2812_status.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\USER\MODULE\module_ws2812\module_ws2812_status.h</FilePath>
             </File>
             <File>
               <FileName>module_moto.c</FileName>
@@ -873,16 +908,6 @@
               <FileName>ringbuf.h</FileName>
               <FileType>5</FileType>
               <FilePath>..\USER\LIB\ringbuf.h</FilePath>
-            </File>
-            <File>
-              <FileName>heap_4.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\USER\LIB\heap_4.c</FilePath>
-            </File>
-            <File>
-              <FileName>heap_4.h</FileName>
-              <FileType>5</FileType>
-              <FilePath>..\USER\LIB\heap_4.h</FilePath>
             </File>
             <File>
               <FileName>uart_and_dma.h</FileName>

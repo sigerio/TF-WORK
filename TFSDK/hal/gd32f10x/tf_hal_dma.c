@@ -73,7 +73,7 @@ static bool gd32_dma_default_init(const tf_drv_dma_ch_cfg_t *ch_cfg,
 
 bool tf_hal_dma_init(const tf_drv_dma_config_t *cfg, uint8_t ch_index)
 {
-    if (cfg == NULL || ch_index >= E_DRV_D0_MAX) {
+    if (cfg == NULL || ch_index >= E_DRV_DX_MAX) {
         return false;
     }
 

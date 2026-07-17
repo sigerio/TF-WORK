@@ -86,7 +86,7 @@ typedef struct tf_drv_dma_ch_config {
 typedef struct tf_drv_dma_config {
     void                *base;           /**< DMA 控制器基地址（如 DMA0 / DMA1） */
     uint8_t              channel_count;  /**< 有效通道数；0 表示使用最大容量     */
-    tf_drv_dma_ch_cfg_t  ch[E_DRV_D0_MAX];  /**< 通道配置数组              */
+    tf_drv_dma_ch_cfg_t  ch[E_DRV_DX_MAX];  /**< 通道配置数组              */
 } tf_drv_dma_config_t;
 
 #if MCU_CONTAIN_PRE_DMA
@@ -136,7 +136,7 @@ bool tf_drv_dma_is_registered(int id);
  * @brief 启动指定 DMA 通道传输
  *
  * @param h         设备句柄
- * @param ch_index  通道索引（0~E_DRV_D0_MAX-1）
+ * @param ch_index  通道索引（0~E_DRV_DX_MAX-1）
  */
 void tf_drv_dma_start(tf_drv_dma_handle_t h, uint8_t ch_index);
 

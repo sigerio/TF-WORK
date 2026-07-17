@@ -37,7 +37,7 @@ static void tf_debug_console_write(const char *buf, uint32_t len)
 
     tf_drv_uart_id_e using_uart_id = E_DRV_UART_0;
     tf_drv_dma_id_e using_dma_id = E_DRV_DMA_0;
-    tf_drv_dma_ch_id_e using_dma_ch_id = E_DRV_D0_CH3;
+    tf_drv_dma_ch_id_e using_dma_ch_id = E_DRV_DX_CH3;
 
     dma_ch = (uint8_t)dma_configs[using_dma_id].ch[using_dma_ch_id].channel;
     base   = dma_configs[using_dma_id].base;
@@ -143,7 +143,7 @@ void use_uart_and_dma(void)
 
     if ((h_uart0 != NULL) && (h_dma0 != NULL)) {
         tf_hal_config_uart_dma_ch(uart_configs[E_DRV_UART_0].base,
-                            (uint8_t)dma_configs[E_DRV_DMA_0].ch[E_DRV_D0_CH3].channel, 1);
+                            (uint8_t)dma_configs[E_DRV_DMA_0].ch[E_DRV_DX_CH3].channel, 1);
     }
 
     
@@ -155,15 +155,15 @@ void use_uart_and_dma(void)
 
     if ((h_uart1 != NULL) && (h_dma0 != NULL)) {
         tf_hal_config_uart_dma_ch(uart_configs[E_DRV_UART_1].base,
-                                (uint8_t)dma_configs[E_DRV_DMA_0].ch[E_DRV_D0_CH5].channel, 1);
+                                (uint8_t)dma_configs[E_DRV_DMA_0].ch[E_DRV_DX_CH5].channel, 1);
         tf_hal_config_uart_dma_ch(uart_configs[E_DRV_UART_1].base,
-                                (uint8_t)dma_configs[E_DRV_DMA_0].ch[E_DRV_D0_CH6].channel, 1);
+                                (uint8_t)dma_configs[E_DRV_DMA_0].ch[E_DRV_DX_CH6].channel, 1);
     }
 
     if ((h_uart2 != NULL) && (h_dma1 != NULL)) {
         tf_hal_config_uart_dma_ch(uart_configs[E_DRV_UART_2].base,
-                                (uint8_t)dma_configs[E_DRV_DMA_1].ch[E_DRV_D0_CH4].channel, 1);
+                                (uint8_t)dma_configs[E_DRV_DMA_1].ch[E_DRV_DX_CH4].channel, 1);
         tf_hal_config_uart_dma_ch(uart_configs[E_DRV_UART_2].base,
-                                (uint8_t)dma_configs[E_DRV_DMA_1].ch[E_DRV_D0_CH2].channel, 1);
+                                (uint8_t)dma_configs[E_DRV_DMA_1].ch[E_DRV_DX_CH2].channel, 1);
     }
 }

@@ -17,6 +17,7 @@
  *   .\TFSDK\hal
  *   .\TFSDK\drv
  *   .\TFSDK\framework
+ *   .\TFSDK\lib
  */
 
 #ifndef TF_BOARD_MCU_H

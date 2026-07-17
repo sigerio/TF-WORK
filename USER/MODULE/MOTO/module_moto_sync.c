@@ -1,5 +1,8 @@
 #include "module_moto_sync.h"
 
+#include "../../../TFSDK/framework/os/tf_os.h"
+#include "../../TASK/tf_usr_event_task.h"
+#include "../module_ws2812/module_ws2812_status.h"
 #include "module_moto.h"
 #include "module_moto_hall.h"
 
@@ -83,6 +86,42 @@ static door_motor_block_monitor_t door1_block_monitor;
 
 /* 门 / 停机坪业务运行状态，由 sync 初始化和运动流程维护。 */
 static module_moto_run_status_t run_status;
+
+static void trigger_door_state_event(door_running_in_e running)
+{
+    (void)tf_os_event_trigger(TF_USR_EVENT_DOOR_STATE,
+                              &running,
+                              sizeof(running),
+                              1U);
+}
+
+static void trigger_heliped_state_event(heliped_running_in_e running)
+{
+    (void)tf_os_event_trigger(TF_USR_EVENT_HELIPED_STATE,
+                              &running,
+                              sizeof(running),
+                              1U);
+}
+
+static void set_door_motion_phase(motion_phase_e phase)
+{
+    if ((door_motion.phase != MOTION_OVER) && (phase == MOTION_OVER))
+    {
+        trigger_door_state_event(E_DOOR_RUN_IDLE);
+    }
+
+    door_motion.phase = phase;
+}
+
+static void set_heliped_motion_phase(motion_phase_e phase)
+{
+    if ((heliped_motion.phase != MOTION_OVER) && (phase == MOTION_OVER))
+    {
+        trigger_heliped_state_event(E_HELIPED_RUN_IDLE);
+    }
+
+    heliped_motion.phase = phase;
+}
 
 /** 同时停止两扇门电机 */
 static void stop_door_motors(void)
@@ -582,7 +621,7 @@ void module_moto_sync_get_run_status(module_moto_run_status_t *status)
 void module_moto_sync_stop_door(void)
 {
     stop_door_motors();
-    door_motion.phase = MOTION_OVER;
+    set_door_motion_phase(MOTION_OVER);
     door_motion.direction = MODULE_MOTO_DIR_STOP;
     door_motion.target_position = MODULE_MOTO_POS_NONE;
     door_motion.motion_error = MOTION_ERROR_NONE;
@@ -593,7 +632,7 @@ void module_moto_sync_stop_door(void)
 void module_moto_sync_stop_heliped(void)
 {
     (void)module_moto_stop(HELIPED_MOTOR_ID);
-    heliped_motion.phase = MOTION_OVER;
+    set_heliped_motion_phase(MOTION_OVER);
     heliped_motion.direction = MODULE_MOTO_DIR_STOP;
     heliped_motion.target_position = MODULE_MOTO_POS_NONE;
     heliped_motion.motion_error = MOTION_ERROR_NONE;
@@ -603,38 +642,42 @@ void module_moto_sync_stop_heliped(void)
 
 void module_moto_sync_request_door_open(void)
 {
-    door_motion.phase = MOTION_START;
+    set_door_motion_phase(MOTION_START);
     door_motion.direction = MODULE_MOTO_DIR_FORWARD;
     door_motion.target_position = MODULE_MOTO_POS_FORWARD;
     door_motion.motion_error = MOTION_ERROR_NONE;
     door_motion.start_err_cnt = 0U;
+    trigger_door_state_event(E_DOOR_RUN_IN_ACTION);
 }
 
 void module_moto_sync_request_door_close(void)
 {
-    door_motion.phase = MOTION_START;
+    set_door_motion_phase(MOTION_START);
     door_motion.direction = MODULE_MOTO_DIR_BACKWARD;
     door_motion.target_position = MODULE_MOTO_POS_BACKWARD;
     door_motion.motion_error = MOTION_ERROR_NONE;
     door_motion.start_err_cnt = 0U;
+    trigger_door_state_event(E_DOOR_RUN_IN_ACTION);
 }
 
 void module_moto_sync_request_heliped_extend(void)
 {
-    heliped_motion.phase = MOTION_START;
+    set_heliped_motion_phase(MOTION_START);
     heliped_motion.direction = MODULE_MOTO_DIR_FORWARD;
     heliped_motion.target_position = MODULE_MOTO_POS_FORWARD;
     heliped_motion.motion_error = MOTION_ERROR_NONE;
     heliped_motion.start_err_cnt = 0U;
+    trigger_heliped_state_event(E_HELIPED_RUN_IN_ACTION);
 }
 
 void module_moto_sync_request_heliped_retract(void)
 {
-    heliped_motion.phase = MOTION_START;
+    set_heliped_motion_phase(MOTION_START);
     heliped_motion.direction = MODULE_MOTO_DIR_BACKWARD;
     heliped_motion.target_position = MODULE_MOTO_POS_BACKWARD;
     heliped_motion.motion_error = MOTION_ERROR_NONE;
     heliped_motion.start_err_cnt = 0U;
+    trigger_heliped_state_event(E_HELIPED_RUN_IN_ACTION);
 }
 
 void module_moto_sync_update(void)
@@ -643,18 +686,18 @@ void module_moto_sync_update(void)
     switch (door_motion.phase)
     {
     case MOTION_START:
-        door_motion.phase = start_door_motion();
+        set_door_motion_phase(start_door_motion());
         break;
 
     case MOTION_ING:
-        door_motion.phase = update_door_motion();
+        set_door_motion_phase(update_door_motion());
         break;
 
     case MOTION_OVER:
         break;
 
     case MOTION_ERR:
-        door_motion.phase = handle_door_motion_error();
+        set_door_motion_phase(handle_door_motion_error());
         break;
     }
 
@@ -662,18 +705,18 @@ void module_moto_sync_update(void)
     switch (heliped_motion.phase)
     {
     case MOTION_START:
-        heliped_motion.phase = start_heliped_motion();
+        set_heliped_motion_phase(start_heliped_motion());
         break;
 
     case MOTION_ING:
-        heliped_motion.phase = update_heliped_motion();
+        set_heliped_motion_phase(update_heliped_motion());
         break;
 
     case MOTION_OVER:
         break;
 
     case MOTION_ERR:
-        heliped_motion.phase = handle_heliped_motion_error();
+        set_heliped_motion_phase(handle_heliped_motion_error());
         break;
     }
 }

@@ -5,11 +5,13 @@
 #include "../MODULE/MOTO/module_moto_business.h"
 #include "../MODULE/MOTO/module_moto_sync.h"
 #include "../MODULE/module_modbus/tf_485_master.h"
+#include "../MODULE/module_ws2812/module_ws2812_status.h"
 #include "tf_usr_event_task.h"
 
 #define TF_KEY_SCAN_PERIOD_MS 50U
 
 static const uint32_t tf_key_scan_period_ms = TF_KEY_SCAN_PERIOD_MS;
+static const uint32_t tf_ws2812_period_ms = MODULE_WS2812_PERIOD_MS;
 
 static void tf_485_master_timer_task(void *arg)
 {
@@ -53,6 +55,14 @@ static void module_moto_sync_update_timer_task(void *arg)
     module_moto_business_update();
 }
 
+
+
+static void module_ws2812_run_timer_task(void *arg)
+{
+    uint16_t* cyctime = (uint16_t*) arg;
+    module_ws2812_status_update(*cyctime);
+}
+
 void tf_usr_time_task_init(void)
 {
     tf_os_soft_timer_task(tf_485_master_timer_task,
@@ -70,5 +80,9 @@ void tf_usr_time_task_init(void)
     tf_os_soft_timer_task(module_moto_sync_update_timer_task,
                           0,
                           MODULE_MOTO_SYNC_MONITOR_PERIOD_MS,
-                          40U);
+                          2U);
+    tf_os_soft_timer_task(module_ws2812_run_timer_task,
+                          (void*)&tf_ws2812_period_ms,
+                          MODULE_WS2812_PERIOD_MS,
+                          30U);
 }
