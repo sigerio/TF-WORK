@@ -78,7 +78,7 @@ int8_t tf_os_soft_pool_task(void (*callback)(void *),
     os_pool_queue[os_pool_tail].callback = callback;
     os_pool_queue[os_pool_tail].arg      = pool_arg;
     os_pool_queue[os_pool_tail].arg_size = (pool_arg != 0) ? arg_size : 0U;
-    os_pool_tail = (os_pool_tail + 1) % TF_OS_POOL_MAX;
+    os_pool_tail = (os_pool_tail + 1) & TF_OS_POOL_MASK;
     os_pool_count++;
 
     TF_DEBUG("OS", "soft_pool_task: cb=%p arg=%p size=%u count=%u\n",
@@ -126,7 +126,7 @@ int8_t tf_os_pool_process(void)
     os_pool_queue[os_pool_head].callback = 0;
     os_pool_queue[os_pool_head].arg = 0;
     os_pool_queue[os_pool_head].arg_size = 0U;
-    os_pool_head = (os_pool_head + 1) % TF_OS_POOL_MAX;
+    os_pool_head = (os_pool_head + 1) & TF_OS_POOL_MASK;
     os_pool_count--;
 
     TF_DEBUG("OS", "pool_process: cb=%p arg=%p size=%u remaining=%u\n",

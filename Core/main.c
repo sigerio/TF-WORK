@@ -3,6 +3,8 @@
 #include "../USER/MODULE/MOTO/module_moto.h"
 #include "../USER/MODULE/MOTO/module_moto_hall.h"
 #include "../USER/MODULE/MOTO/module_moto_sync.h"
+#include "../USER/MODULE/iec104/iec104_server.h"
+#include "../USER/MODULE/iec104/port/iec104_port_usart1.h"
 #include "../USER/MODULE/module_modbus/tf_485_master.h"
 #include "../USER/MODULE/module_ws2812/module_ws2812.h"
 #include "../USER/TASK/tf_usr_event_task.h"
@@ -12,6 +14,7 @@
 int main(void)
 {
     use_uart_and_dma();
+    (void)iec104_port_usart1_init();
     module_ws2812_init();
     tf_485_master_init();
     tf_key_init();
@@ -20,6 +23,7 @@ int main(void)
 #if MODULE_MOTO_HALL_ENABLE
     module_moto_hall_init();
 #endif
+    iec104_server_init();
 
     tf_os_init();
     tf_usr_time_task_init();

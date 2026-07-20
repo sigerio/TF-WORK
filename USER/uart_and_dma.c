@@ -14,7 +14,6 @@
 
 
 static tf_drv_uart_handle_t h_uart0 = NULL;
-static tf_drv_uart_handle_t h_uart1 = NULL;
 static tf_drv_uart_handle_t h_uart2 = NULL;
 static tf_drv_dma_handle_t h_dma0 = NULL;
 static tf_drv_dma_handle_t h_dma1 = NULL;
@@ -136,7 +135,6 @@ int tf_debug_printf(const char *fmt, ...)
 void use_uart_and_dma(void)
 {
     h_uart0 = tf_drv_uart_register(E_DRV_UART_0);
-    h_uart1 = tf_drv_uart_register(E_DRV_UART_1);
     h_uart2 = tf_drv_uart_register(E_DRV_UART_2);
     h_dma0 = tf_drv_dma_register(E_DRV_DMA_0);
     h_dma1 = tf_drv_dma_register(E_DRV_DMA_1);
@@ -152,13 +150,6 @@ void use_uart_and_dma(void)
     TF_DEBUG("APP", "TF_PRINTF/TF_DEBUG use USART0 DMA0_CH3 polling TX\n");
 
     
-
-    if ((h_uart1 != NULL) && (h_dma0 != NULL)) {
-        tf_hal_config_uart_dma_ch(uart_configs[E_DRV_UART_1].base,
-                                (uint8_t)dma_configs[E_DRV_DMA_0].ch[E_DRV_DX_CH5].channel, 1);
-        tf_hal_config_uart_dma_ch(uart_configs[E_DRV_UART_1].base,
-                                (uint8_t)dma_configs[E_DRV_DMA_0].ch[E_DRV_DX_CH6].channel, 1);
-    }
 
     if ((h_uart2 != NULL) && (h_dma1 != NULL)) {
         tf_hal_config_uart_dma_ch(uart_configs[E_DRV_UART_2].base,

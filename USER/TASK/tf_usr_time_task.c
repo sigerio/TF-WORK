@@ -4,6 +4,7 @@
 #include "../MODULE/KEY/key.h"
 #include "../MODULE/MOTO/module_moto_business.h"
 #include "../MODULE/MOTO/module_moto_sync.h"
+#include "../MODULE/iec104/iec104_server.h"
 #include "../MODULE/module_modbus/tf_485_master.h"
 #include "../MODULE/module_ws2812/module_ws2812_status.h"
 #include "tf_usr_event_task.h"
@@ -23,6 +24,18 @@ static void tf_485_query_timer_task(void *arg)
 {
     (void)arg;
     tf_485_query_task();
+}
+
+static void iec104_server_comm_timer_task(void *arg)
+{
+    (void)arg;
+    iec104_server_comm_task();
+}
+
+static void iec104_server_poll_timer_task(void *arg)
+{
+    (void)arg;
+    iec104_server_poll_task();
 }
 
 static void tf_key_scan_timer_task(void *arg)
@@ -73,6 +86,14 @@ void tf_usr_time_task_init(void)
                           0,
                           MODULE_MODBUS_QUEUE_FILL_PERIOD_MS,
                           20U);
+    tf_os_soft_timer_task(iec104_server_comm_timer_task,
+                          0,
+                          IEC104_SERVER_COMM_PERIOD_MS,
+                          10U);
+    tf_os_soft_timer_task(iec104_server_poll_timer_task,
+                          0,
+                          IEC104_SERVER_POLL_PERIOD_MS,
+                          15U);
     tf_os_soft_timer_task(tf_key_scan_timer_task,
                           (void *)&tf_key_scan_period_ms,
                           TF_KEY_SCAN_PERIOD_MS,

@@ -28,6 +28,7 @@ extern "C" {
 /** @brief 队列最大容量，可通过编译器 -D 覆盖 */
 #ifndef TF_OS_POOL_MAX
 #define TF_OS_POOL_MAX   8
+#define TF_OS_POOL_MASK   (TF_OS_POOL_MAX-1)
 #endif
 
 #if ((TF_OS_POOL_MAX == 0U) || (TF_OS_POOL_MAX > 255U))

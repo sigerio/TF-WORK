@@ -33,6 +33,7 @@ OF SUCH DAMAGE.
 */
 
 #include "gd32f10x_it.h"
+#include "../USER/MODULE/iec104/port/iec104_port_usart1.h"
 #include "../USER/MODULE/module_modbus/tf_485_master.h"
 #include "../USER/MODULE/MOTO/module_moto_hall.h"
 
@@ -153,6 +154,16 @@ void SysTick_Handler(void)
 void USART2_IRQHandler(void)
 {
     tf_485_usart2_irq();
+}
+
+void USART1_IRQHandler(void)
+{
+    iec104_port_usart1_irq();
+}
+
+void DMA0_Channel5_IRQHandler(void)
+{
+    iec104_port_usart1_rx_dma_irq();
 }
 
 void EXTI10_15_IRQHandler(void)
