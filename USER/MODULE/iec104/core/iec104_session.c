@@ -14,18 +14,21 @@
 #define IEC104_K     12U
 #define IEC104_W     8U
 
+/* 本端 I 帧发送窗口：下一个 N(S)、最早未确认 N(S) 和窗口占用数。 */
 typedef struct {
     uint16_t next_sequence;
     uint16_t first_unacknowledged_sequence;
     uint8_t unacknowledged_count;
 } iec104_send_window_t;
 
+/* 对端 I 帧接收确认：期望 N(S) 以及尚未通过 N(R) 确认的帧数。 */
 typedef struct {
     uint16_t expected_sequence;
     uint8_t pending_count;
     uint32_t first_pending_tick;
 } iec104_receive_ack_t;
 
+/* STARTDT 数据传输状态和 T1/T3 测试帧监视状态。 */
 typedef struct {
     uint8_t data_transfer_started;
     uint8_t test_frame_pending;
@@ -46,7 +49,11 @@ static uint8_t iec104_received_acknowledges(uint16_t receive_sequence)
 {
     uint16_t distance;
 
-    distance = (uint16_t)((receive_sequence + IEC104_SEQUENCE_LIMIT - session.send_window.first_unacknowledged_sequence) & IEC104_SEQUENCE_MASK); //等价于对IEC104_SEQUENCE_LIMIT取余运算
+    /*
+     * 序列号按 32768 回绕。N(R) 与最早未确认序号的距离不能超过当前发送窗口，
+     * 否则对端确认了本端尚未发送的 I 帧。
+     */
+    distance = (uint16_t)((receive_sequence + IEC104_SEQUENCE_LIMIT - session.send_window.first_unacknowledged_sequence) & IEC104_SEQUENCE_MASK);
     if (distance > session.send_window.unacknowledged_count) {
         return 0U;
     }
@@ -99,6 +106,7 @@ uint8_t iec104_session_send_asdu(const uint8_t *asdu, uint8_t asdu_length, uint3
         return 0U;
     }
 
+    /* 只有 APDU 成功入队后才占用发送窗口，避免入队失败造成 N(S) 断层。 */
     if (session.send_window.unacknowledged_count == 0U) {
         session.send_window.first_unacknowledged_sequence = session.send_window.next_sequence;
     }
@@ -127,6 +135,7 @@ uint8_t iec104_session_data_transfer_started(void)
 
 static void iec104_handle_i_frame(const iec104_frame_t *frame, uint32_t now)
 {
+    /* I 帧同时确认本端发送窗口；对端 N(S) 必须与当前期望值严格连续。 */
     if (!iec104_received_acknowledges(frame->receive_sequence) ||
         (frame->send_sequence != session.receive_ack.expected_sequence)) {
         return;
@@ -143,6 +152,7 @@ static void iec104_handle_i_frame(const iec104_frame_t *frame, uint32_t now)
         session.callbacks.on_asdu(frame, now);
     }
 
+    /* 收满 W 帧立即发 S 帧；未满 W 时由 T2 定时器延迟确认。 */
     if (session.receive_ack.pending_count >= IEC104_W) {
         (void)iec104_send_s_ack(now);
     }
@@ -152,6 +162,10 @@ static void iec104_discard_queued_i_frames(void)
 {
     uint8_t removed_count = iec104_txq_remove_i_frames();
 
+    /*
+     * STOPDT 只撤销尚未交给 DMA 的 I 帧。被撤销的帧没有真正发出，因此回退
+     * next_sequence，使恢复数据传输后的首帧继续使用正确的 N(S)。
+     */
     session.send_window.next_sequence =
         (uint16_t)((session.send_window.next_sequence +
                     IEC104_SEQUENCE_LIMIT - removed_count) &
@@ -227,17 +241,20 @@ void iec104_session_handle_frame(const iec104_frame_t *frame, uint32_t now)
 
 void iec104_session_service_timers(uint32_t now)
 {
+    /* T2：接收窗口未满 W 时也必须在规定时间内确认。 */
     if ((session.receive_ack.pending_count > 0U) &&
         ((now - session.receive_ack.first_pending_tick) >= IEC104_T2_MS)) {
         (void)iec104_send_s_ack(now);
     }
 
+    /* T1：测试确认超时后结束本轮等待，允许后续 T3 再次发起链路测试。 */
     if ((session.link.test_frame_pending != 0U) &&
         ((now - session.link.test_frame_tick) >= IEC104_T1_MS)) {
         session.link.test_frame_pending = 0U;
         iec104_activity_record(now);
     }
 
+    /* T3：链路空闲且没有待确认测试帧时发送 TESTFR ACT。 */
     if ((session.link.test_frame_pending == 0U) &&
         ((now - session.link.last_activity_tick) >= IEC104_T3_MS) &&
         iec104_send_u(IEC104_U_TESTFR_ACT)) {
@@ -258,4 +275,3 @@ void iec104_session_init(const iec104_session_callbacks_t *callbacks, uint32_t n
     session.link.test_frame_tick = now;
     iec104_txq_init();
 }
-

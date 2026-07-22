@@ -23,6 +23,7 @@ static uint16_t iec104_sequence_decode(const uint8_t *control)
     uint16_t sequence = (uint16_t)control[0] |
                         ((uint16_t)control[1] << 8U);
 
+    /* 序列号在线路上左移一位，bit0 留给帧格式标志。 */
     return sequence >> 1U;
 }
 
@@ -86,7 +87,7 @@ uint16_t iec104_build_u(uint8_t *apdu, uint16_t apdu_capacity, iec104_u_command_
 
     return 6U;
 }
-/*帧类型解码*/
+
 uint8_t iec104_decode(const uint8_t *apdu, uint16_t apdu_length, iec104_frame_t *decoded)
 {
     const uint8_t *control;
@@ -111,6 +112,10 @@ uint8_t iec104_decode(const uint8_t *apdu, uint16_t apdu_length, iec104_frame_t 
         return 0U;
     }
 
+    /*
+     * 先按控制域标志识别格式，再校验该格式是否允许 ASDU：
+     * I 帧必须携带 ASDU，S/U 帧的长度域必须只包含 4 字节控制域。
+     */
     if (((control[0] & 0x01U) == 0U) && ((control[2] & 0x01U) == 0U) && (asdu_length > 0U))
     {
         decoded->format = IEC104_FRAME_I;

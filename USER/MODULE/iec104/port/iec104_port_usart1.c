@@ -51,6 +51,7 @@ static iec104_tx_t tx;
 
 static void iec104_rx_dma_restart(void)
 {
+    /* 每次提交本批数据后，从 DMA 缓冲区起点重新接收下一批字节。 */
     tf_drv_dma_stop(dma, hw.rx_dma);
     tf_hal_config_uart_dma_ch(uart_configs[hw.uart].base, (uint8_t)dma_configs[hw.dma].ch[hw.rx_dma].channel, 0U);
     tf_drv_dma_addr_config(dma, hw.rx_dma, dma_configs[hw.dma].ch[hw.rx_dma].periph_addr, (uint32_t)rx.dma_buf);
@@ -65,6 +66,10 @@ static void iec104_rx_dma_store(void)
     uint32_t remain;
     uint32_t rx_length;
 
+    /*
+     * USART 空闲中断提交不足 256 字节的短批次，DMA 满中断提交完整批次；
+     * 两条中断路径共用本函数，提交后立即重启 DMA。
+     */
     tf_drv_dma_stop(dma, hw.rx_dma);
     remain = tf_drv_dma_remaining_get(dma, hw.rx_dma);
     if (remain <= IEC104_RX_DMA_SIZE) {
@@ -118,6 +123,7 @@ void iec104_port_tx_service(void)
         return;
     }
 
+    /* DMA 搬运完成且 USART 移位寄存器发送完成后，缓冲区才可复用。 */
     tf_hal_config_uart_dma_ch(uart_configs[hw.uart].base, (uint8_t)dma_configs[hw.dma].ch[hw.tx_dma].channel, 0U);
     tf_drv_dma_stop(dma, hw.tx_dma);
     tf_hal_dma_flag_clear(dma_configs[hw.dma].base, (uint8_t)dma_configs[hw.dma].ch[hw.tx_dma].channel, DMA_FLAG_G);
@@ -140,6 +146,7 @@ uint8_t iec104_port_usart1_init(void)
     ringbuf_init(&rx.fifo, rx.fifo_buf, sizeof(rx.fifo_buf));
     tf_hal_uart_rx_flush(uart_configs[hw.uart].base);
     iec104_rx_dma_restart();
+    /* IDLE 负责短帧/停顿分段，DMA FTF 保证连续满缓冲数据也能及时提交。 */
     tf_hal_dma_interrupt_config(dma_configs[hw.dma].base, (uint8_t)dma_configs[hw.dma].ch[hw.rx_dma].channel, DMA_INT_FTF);
     tf_hal_uart_interrupt_enable(uart_configs[hw.uart].base, USART_INT_IDLE);
     nvic_irq_enable(DMA0_Channel5_IRQn, 1U, 0U);

@@ -16,6 +16,7 @@
 #define IEC104_QUALITY_NT 0x40U
 #define IEC104_QUALITY_SB 0x20U
 
+/* 工程点表：0x000xxx 门机，0x001xxx 遥信，0x002xxx 遥测，0x003xxx 遥调。 */
 #define IEC104_IOA_YX_DOOR_OPENED       0x000001UL
 #define IEC104_IOA_YX_DOOR_CLOSED       0x000002UL
 #define IEC104_IOA_YX_HELIPED_EXTENDED  0x000003UL
@@ -84,7 +85,7 @@
 #define IEC104_IOA_YT_485_AC_HUMIDITY_CALIBRATION 0x00300BUL
 #define IEC104_IOA_YT_485_AC_MODE_CONTROL 0x00300CUL
 
-
+/* IEC 信息元素限定词的位视图，quality 可用于直接访问完整字节。 */
 typedef union 
 {
     struct SIQ
@@ -132,8 +133,7 @@ typedef union
     uint8_t quality;
 }quality_u;
 
-
-
+/* 一次采集保存所有业务模块数据，保证同一总召唤中的遥信和遥测来自同批快照。 */
 typedef struct {
     module_moto_run_status_t motor;
     xm7828_th_data_t th;
@@ -161,6 +161,7 @@ static void iec104_app_snapshot_read(iec104_app_snapshot_t *snapshot)
 
 static uint8_t iec104_status_quality(uint8_t online, uint8_t sensor_fault)
 {
+    /* 离线数据标为无效且非当前值；传感器故障数据标为无效且被替代。 */
     if (online == 0U) {
         return IEC104_QUALITY_IV | IEC104_QUALITY_NT;
     }
@@ -174,6 +175,7 @@ static uint8_t iec104_status_quality(uint8_t online, uint8_t sensor_fault)
 
 static uint8_t iec104_door_state_code(const module_moto_run_status_t *run_status)
 {
+    /* 工程约定：0 未知/中间，1 打开方向，2 关闭方向，3 故障。 */
     if (run_status->door == MODULE_MOTO_DOOR_STATE_FAULT) {
         return 3U;
     }
@@ -193,6 +195,7 @@ static uint8_t iec104_door_state_code(const module_moto_run_status_t *run_status
 
 static uint8_t iec104_heliped_state_code(const module_moto_run_status_t *run_status)
 {
+    /* 工程约定：0 未知/中间，1 伸出方向，2 收回方向，3 故障。 */
     if (run_status->heliped == MODULE_MOTO_HELIPED_STATE_FAULT) {
         return 3U;
     }
@@ -318,6 +321,7 @@ static void iec104_app_fill_measure_points(const iec104_app_snapshot_t *snapshot
     points[14] = (iec104_measure_point_t){ IEC104_IOA_YC_485_AC_HUMIDITY,
         (float)ac->params.humidity_deci_rh / 10.0F, ac_humidity_quality };
 
+    /* 参数区尚未收到有效寄存器数据时，四个空调遥测点统一标为无效。 */
     if (ac->params.marks.raw == 0U) {
         points[11].quality = IEC104_QUALITY_IV | IEC104_QUALITY_NT;
         points[12].quality = IEC104_QUALITY_IV | IEC104_QUALITY_NT;
@@ -454,6 +458,7 @@ uint8_t iec104_app_tuning_value_parse(uint32_t ioa, const uint8_t *data, uint32_
 {
     float float_value;
 
+    /* 模式控制在线路上是 2 字节整数，其余参数是 4 字节短浮点值。 */
     if (ioa == IEC104_IOA_YT_485_AC_MODE_CONTROL) {
         *value = iec104_u16_read(data);
         *value_length = 2U;
@@ -469,6 +474,7 @@ uint8_t iec104_app_tuning_value_parse(uint32_t ioa, const uint8_t *data, uint32_
 
     memcpy(value, data, sizeof(float_value));
     *value_length = 4U;
+    /* 空调寄存器以 0.1 为单位保存有符号值。 */
     *register_value = (uint16_t)(int16_t)(float_value * 10.0F);
     return 1U;
 }
