@@ -1,15 +1,14 @@
 #include "tf_usr_event_task.h"
 
-#include "../../TFSDK/framework/os/tf_os.h"
-#include "../MODULE/module_modbus/tf_485_ac.h"
-#include "../MODULE/module_modbus/tf_485_xm7828.h"
-#include "../MODULE/module_modbus/tf_485_xm8189.h"
-#include "../MODULE/module_modbus/tf_485_xm8537.h"
-#include "../MODULE/module_modbus/tf_485_xm9505.h"
-#include "../MODULE/KEY/key.h"
-#include "../MODULE/KEY/key_event.h"
-#include "../MODULE/MOTO/module_moto_business.h"
-#include "../MODULE/module_ws2812/module_ws2812_status.h"
+#include "../OS/tf_os.h"
+#include "../COMM/modbus/tf_modbus_ac.h"
+#include "../COMM/modbus/tf_modbus_xm7828.h"
+#include "../COMM/modbus/tf_modbus_xm8189.h"
+#include "../COMM/modbus/tf_modbus_xm8537.h"
+#include "../COMM/modbus/tf_modbus_xm9505.h"
+#include "../USER/CTRL/KEY/key_event.h"
+#include "../USER/CTRL/MOTO/module_moto_business.h"
+#include "../CTRL/module_ws2812/module_ws2812_status.h"
 #include "tf_debug.h"
 
 
@@ -28,7 +27,7 @@ static void tf_usr_485_xm7828_write_cb(void *arg)
         return;
     }
 
-    if (!tf_485_xm7828_write(write_arg->slave_addr,
+    if (!tf_modbus_xm7828_write(write_arg->slave_addr,
                              write_arg->ref,
                              write_arg->value)) {
         TF_DEBUG("EVENT",
@@ -48,7 +47,7 @@ static void tf_usr_485_xm8189_write_cb(void *arg)
         return;
     }
 
-    if (!tf_485_xm8189_write(write_arg->slave_addr,
+    if (!tf_modbus_xm8189_write(write_arg->slave_addr,
                              write_arg->ref,
                              write_arg->value)) {
         TF_DEBUG("EVENT",
@@ -68,7 +67,7 @@ static void tf_usr_485_xm8537_write_cb(void *arg)
         return;
     }
 
-    if (!tf_485_xm8537_write(write_arg->slave_addr,
+    if (!tf_modbus_xm8537_write(write_arg->slave_addr,
                              write_arg->ref,
                              write_arg->value)) {
         TF_DEBUG("EVENT",
@@ -88,7 +87,7 @@ static void tf_usr_485_xm9505_write_cb(void *arg)
         return;
     }
 
-    if (!tf_485_xm9505_write(write_arg->slave_addr,
+    if (!tf_modbus_xm9505_write(write_arg->slave_addr,
                              write_arg->ref,
                              write_arg->value)) {
         TF_DEBUG("EVENT",
@@ -108,7 +107,7 @@ static void tf_usr_485_ac_status_write_cb(void *arg)
         return;
     }
 
-    if (!tf_485_ac_write_status(write_arg->slave_addr,
+    if (!tf_modbus_ac_write_status(write_arg->slave_addr,
                                 write_arg->ref,
                                 write_arg->value != 0U)) {
         TF_DEBUG("EVENT",
@@ -128,7 +127,7 @@ static void tf_usr_485_ac_param_write_cb(void *arg)
         return;
     }
 
-    if (!tf_485_ac_write_param(write_arg->slave_addr,
+    if (!tf_modbus_ac_write_param(write_arg->slave_addr,
                                write_arg->ref,
                                (int16_t)write_arg->value)) {
         TF_DEBUG("EVENT",
@@ -149,15 +148,13 @@ static void tf_usr_key_event_c(void *arg)
 static void tf_usr_em_stop_event_cb(void *arg)
 {
     (void)arg;
+    module_moto_business_estop_activate();
+}
 
-    if (tf_key_is_pressed_now(TF_KEY_ID_EM_STOP))
-    {
-        module_moto_business_estop_activate();
-    }
-    else
-    {
-        module_moto_business_estop_release();
-    }
+static void tf_usr_em_stop_recover_event_cb(void *arg)
+{
+    (void)arg;
+    module_moto_business_estop_release();
 }
 
 
@@ -172,15 +169,15 @@ static void tf_usr_door_state_event_cb(void *arg)
     set_door_running_in(*running);
 }
 
-static void tf_usr_heliped_state_event_cb(void *arg)
+static void tf_usr_platform_state_event_cb(void *arg)
 {
-    const heliped_running_in_e *running = (const heliped_running_in_e *)arg;
+    const platform_running_in_e *running = (const platform_running_in_e *)arg;
 
     if (running == 0) {
         return;
     }
 
-    set_heliped_running_in(*running);
+    set_platform_running_in(*running);
 }
 
 
@@ -208,14 +205,17 @@ void tf_usr_event_task_init(void)
     tf_os_soft_event_task(TF_USR_EVENT_EM_STOP,
                           tf_usr_em_stop_event_cb,
                           0);
+    tf_os_soft_event_task(TF_USR_EVENT_EM_STOP_RECOVER,
+                          tf_usr_em_stop_recover_event_cb,
+                          0);
     tf_os_soft_event_task(TF_USR_EVENT_KEY_TRIG,
                           tf_usr_key_event_c,
                           1);
     tf_os_soft_event_task(TF_USR_EVENT_DOOR_STATE,
                           tf_usr_door_state_event_cb,
                           2);
-    tf_os_soft_event_task(TF_USR_EVENT_HELIPED_STATE,
-                          tf_usr_heliped_state_event_cb,
+    tf_os_soft_event_task(TF_USR_EVENT_PLATFORM_STATE,
+                          tf_usr_platform_state_event_cb,
                           2);
 }
 

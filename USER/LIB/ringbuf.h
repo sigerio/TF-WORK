@@ -19,7 +19,7 @@ extern "C" {
  *    - 读指针追上写指针时，翻转 read_mirror 标记空
  *
  *  @note  本实现在 RS485 总线接收通道中用作二级缓冲
- *         （tf_485_rx_t.fifo），暂存 IDLE 中断推送来的数据帧，
+ *         （com_link 注册的 rx_fifo），暂存 IDLE 中断推送来的数据帧，
  *         供主站任务轮询读取。所有读写操作须关中断保护。
  */
 typedef struct {

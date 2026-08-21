@@ -56,12 +56,15 @@ void DebugMon_Handler(void);
 void PendSV_Handler(void);
 /* SysTick handle function */
 void SysTick_Handler(void);
+/* USART0 handle function */
+void USART0_IRQHandler(void);
 /* USART1 handle function */
 void USART1_IRQHandler(void);
-/* DMA0 channel5 handle function */
-void DMA0_Channel5_IRQHandler(void);
 /* USART2 handle function */
 void USART2_IRQHandler(void);
-/* EXTI line 10 to EXTI line 15 handle function */
-void EXTI10_15_IRQHandler(void);
+/* UART3 handle function */
+void UART3_IRQHandler(void);
+/* DMA0 channel5 handle function */
+void DMA0_Channel5_IRQHandler(void);
+void DMA0_Channel1_IRQHandler(void);
 #endif /* GD32F10X_IT_H */

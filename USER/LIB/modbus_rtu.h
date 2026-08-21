@@ -3,7 +3,6 @@
 
 #include <stdint.h>
 
-#include "tf_board_config.h"
 #include <stdbool.h>
 
 #ifdef __cplusplus

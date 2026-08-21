@@ -1,29 +1,30 @@
 #include "tf_usr_time_task.h"
 
-#include "../../TFSDK/framework/os/tf_os.h"
-#include "../MODULE/KEY/key.h"
-#include "../MODULE/MOTO/module_moto_business.h"
-#include "../MODULE/MOTO/module_moto_sync.h"
-#include "../MODULE/iec104/iec104_server.h"
-#include "../MODULE/module_modbus/tf_485_master.h"
-#include "../MODULE/module_ws2812/module_ws2812_status.h"
+#include "../OS/tf_os.h"
+#include "../USER/CTRL/KEY/key.h"
+#include "../USER/CTRL/MOTO/module_moto_business.h"
+#include "../USER/CTRL/MOTO/module_moto_sync.h"
+#include "../COMM/iec104/iec104_server.h"
+#include "../COMM/modbus/tf_modbus_master.h"
+#include "../CTRL/module_ws2812/module_ws2812_status.h"
 #include "tf_usr_event_task.h"
 
 #define TF_KEY_SCAN_PERIOD_MS 50U
 
 static const uint32_t tf_key_scan_period_ms = TF_KEY_SCAN_PERIOD_MS;
 static const uint32_t tf_ws2812_period_ms = MODULE_WS2812_PERIOD_MS;
+static bool tf_estop_was_pressed;
 
-static void tf_485_master_timer_task(void *arg)
+static void tf_modbus_master_timer_task(void *arg)
 {
     (void)arg;
-    tf_485_master_task();
+    tf_modbus_master_task();
 }
 
-static void tf_485_query_timer_task(void *arg)
+static void tf_modbus_query_timer_task(void *arg)
 {
     (void)arg;
-    tf_485_query_task();
+    tf_modbus_query_task();
 }
 
 static void iec104_server_comm_timer_task(void *arg)
@@ -43,9 +44,16 @@ static void tf_key_scan_timer_task(void *arg)
     const uint32_t *period_ms = (const uint32_t *)arg;
     uint32_t cycle_ms = (period_ms != 0) ? *period_ms : TF_KEY_SCAN_PERIOD_MS;
     tf_key_info_t key_info;
+    bool estop_pressed;
 
     tf_key_scan_task(cycle_ms);
-    (void)tf_os_event_trigger(TF_USR_EVENT_EM_STOP, 0, 0U, 1U);
+    estop_pressed = tf_key_is_pressed_now(TF_KEY_ID_EM_STOP);
+    if (estop_pressed) {
+        (void)tf_os_event_trigger(TF_USR_EVENT_EM_STOP, 0, 0U, 1U);
+    } else if (tf_estop_was_pressed) {
+        (void)tf_os_event_trigger(TF_USR_EVENT_EM_STOP_RECOVER, 0, 0U, 1U);
+    }
+    tf_estop_was_pressed = estop_pressed;
 
     key_info = tf_key_get_info();
 
@@ -78,11 +86,11 @@ static void module_ws2812_run_timer_task(void *arg)
 
 void tf_usr_time_task_init(void)
 {
-    tf_os_soft_timer_task(tf_485_master_timer_task,
+    tf_os_soft_timer_task(tf_modbus_master_timer_task,
                           0,
                           MODULE_MODBUS_MASTER_PERIOD_MS,
                           10U);
-    tf_os_soft_timer_task(tf_485_query_timer_task,
+    tf_os_soft_timer_task(tf_modbus_query_timer_task,
                           0,
                           MODULE_MODBUS_QUEUE_FILL_PERIOD_MS,
                           20U);

@@ -1,0 +1,18 @@
+.agents/
+.claude/
+.codex/
+
+# Historical sources and local uVision/J-Link state are not build inputs.
+legacy/
+CMSIS/GD/startup_gd32f10x_cl.s
+CMSIS/GD/startup_gd32f10x_md.s
+CMSIS/GD/startup_gd32f10x_xd.s
+MDK/*.uvoptx
+MDK/*.uvguix.*
+MDK/JLink*.txt
+MDK/JLink*.ini
+MDK/EventRecorderStub.scvd
+
+MDK/Listing/
+MDK/Objects/
+MDK/RTE/
