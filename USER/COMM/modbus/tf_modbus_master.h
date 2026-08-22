@@ -119,8 +119,11 @@ typedef struct {
 } tf_modbus_diag_t;
 #endif
 
+/* 初始化两条 RS-485 总线、接收 FIFO 和 Modbus 发送队列。 */
 bool tf_modbus_master_init(void);
+/* 快周期收发任务：发送队头请求、接收响应并驱动超时处理。 */
 void tf_modbus_master_task(void);
+/* 慢周期巡检任务：为各从机填充下一轮读请求。 */
 void tf_modbus_query_task(void);
 #if MODULE_MODBUS_ENABLE_DIAG
 void tf_modbus_get_diag(tf_modbus_diag_t *diag);
@@ -128,6 +131,7 @@ void tf_modbus_clear_diag(void);
 #endif
 
 /* 各总线 USART IDLE 中断入口（由芯片 IRQHandler 调用） */
+/* 气象总线和空调总线的 USART 中断转发入口。 */
 void tf_modbus_weather_irq(void);
 void tf_modbus_ac_irq(void);
 

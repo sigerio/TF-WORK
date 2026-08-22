@@ -1,5 +1,7 @@
-#ifndef MODULE_MOTO_SYNC_H
-#define MODULE_MOTO_SYNC_H
+#ifndef MOTOR_MOTION_H
+#define MOTOR_MOTION_H
+
+#include "motor_driver.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -25,7 +27,6 @@ typedef enum
 {
     MODULE_MOTO_DOOR_STATE_FAULT = 0,
     MODULE_MOTO_DOOR_STATE_CLOSED,
-    MODULE_MOTO_DOOR_STATE_SAFE_OPEN,
     MODULE_MOTO_DOOR_STATE_OPENED,
     MODULE_MOTO_DOOR_STATE_INTERMEDIATE,
 } module_moto_door_state_e;
@@ -41,20 +42,25 @@ typedef enum
 {
     MODULE_MOTO_PLATFORM_STATE_FAULT = 0,
     MODULE_MOTO_PLATFORM_STATE_EXTENDED,
-    MODULE_MOTO_PLATFORM_STATE_SAFE_RETRACT,
     MODULE_MOTO_PLATFORM_STATE_RETRACTED,
     MODULE_MOTO_PLATFORM_STATE_INTERMEDIATE,
 } module_moto_platform_state_e;
 
 /**
- * 门 / 平台业务运行状态快照。
- * @note 仅描述业务语义，不包含电机 phase/direction 等运动层细节。
- *       供后续流程编排读取；由 sync 模块内部维护。
+ * 门 / 平台业务运行状态及硬件信号快照。
+ * @note 供后续流程编排与调试器 Watch 读取；由 sync 模块内部维护。
  */
 typedef struct
 {
-    module_moto_door_state_e door;
-    module_moto_platform_state_e platform;
+    module_moto_door_state_e door;              /* 门业务终态或中间/故障状态。 */
+    module_moto_platform_state_e platform;      /* 平台业务终态或中间/故障状态。 */
+    module_moto_driver_status_t platform_motor; /* 平台电机驱动及反馈快照。 */
+    module_moto_driver_status_t door1_motor;    /* 左门电机驱动及反馈快照。 */
+    module_moto_driver_status_t door2_motor;    /* 右门电机驱动及反馈快照。 */
+    uint8_t platform_extend_limit_active;       /* 平台伸出限位是否有效。 */
+    uint8_t platform_retract_limit_active;      /* 平台收回限位是否有效。 */
+    uint8_t door_open_limit_active;             /* 两门打开到位限位是否有效。 */
+    uint8_t door_close_limit_active;            /* 两门关闭到位限位是否有效。 */
 } module_moto_run_status_t;
 
 /** 在电机模块初始化完成后，根据当前限位建立业务运行状态。 */
@@ -66,6 +72,7 @@ void module_moto_sync_init(void);
  */
 void module_moto_sync_get_run_status(module_moto_run_status_t *status);
 
+/* 立即停止对应设备的所有电机，并终止当前运动请求。 */
 void module_moto_sync_stop_door(void);
 void module_moto_sync_stop_platform(void);
 
@@ -104,4 +111,4 @@ void module_moto_sync_update(void);
 }
 #endif
 
-#endif /* MODULE_MOTO_SYNC_H */
+#endif /* MOTOR_MOTION_H */

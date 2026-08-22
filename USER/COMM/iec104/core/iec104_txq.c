@@ -78,38 +78,6 @@ uint8_t iec104_txq_push(const uint8_t *apdu, uint16_t apdu_length)
     return 1U;
 }
 
-uint8_t iec104_txq_remove_i_frames(void)
-{
-    uint16_t read_offset = txq_head;
-    uint16_t write_offset = txq_head;
-    uint8_t removed_count = 0U;
-
-    while (read_offset < txq_tail) {
-        uint16_t frame_length = iec104_txq_read_length(read_offset);
-        uint16_t total = (uint16_t)(IEC104_TXQ_PREFIX_SIZE + frame_length);
-        uint8_t is_i_frame =
-            (frame_length >= 6U) &&
-            ((txq_buf[read_offset + IEC104_TXQ_PREFIX_SIZE + 2U] & 0x01U) == 0U);
-
-        if (is_i_frame) {
-            removed_count++;
-        } else {
-            if (write_offset != read_offset) {
-                memmove(&txq_buf[write_offset], &txq_buf[read_offset], total);
-            }
-            write_offset = (uint16_t)(write_offset + total);
-        }
-        read_offset = (uint16_t)(read_offset + total);
-    }
-
-    txq_tail = write_offset;
-    if (txq_head == txq_tail) {
-        txq_head = 0U;
-        txq_tail = 0U;
-    }
-    return removed_count;
-}
-
 uint8_t iec104_txq_pop(uint8_t *apdu, uint16_t apdu_capacity, uint16_t *apdu_length)
 {
     uint16_t frame_length;

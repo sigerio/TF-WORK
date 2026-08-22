@@ -166,6 +166,16 @@ uint32_t ringbuf_write_force(ringbuf_t *rb, const uint8_t *data, uint32_t len)
     return written;
 }
 
+uint32_t ringbuf_read_exact(ringbuf_t *rb, uint8_t *data, uint32_t len)
+{
+    if ((rb == 0) || (data == 0) || (len == 0U) ||
+        (ringbuf_available(rb) < len)) {
+        return 0U;
+    }
+
+    return ringbuf_read(rb, data, len);
+}
+
 uint32_t ringbuf_read(ringbuf_t *rb, uint8_t *data, uint32_t len)
 {
     uint32_t available;

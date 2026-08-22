@@ -1,6 +1,6 @@
 #include "board.h"
 
-#include "module_moto.h"
+#include "motor_driver.h"
 #include "gd32f10x_gpio.h"
 #include "gd32f10x_rcu.h"
 #include "gd32f10x_timer.h"
@@ -9,17 +9,17 @@
  * 推杆电机 PWM 驱动（新硬件拓扑）
  *
  * 每个推杆电机由「推出 / 收回」两路 PWM 控制（同一 TIMER 的两个通道），
- * 驱动板高电平有效。默认空闲输出 99% 占空比的高电平。
+ * 驱动板高电平有效。未驱动方向输出低电平并关闭通道。
  *
  *   平台: TIMER1 CH0=PA0(推出) CH1=PA1(收回)
  *   门1 : TIMER3 CH0=PB6(推出) CH1=PB7(收回)
  *   门2 : TIMER3 CH2=PB8(推出) CH3=PB9(收回)
  *
  * 真值表（extend/retract 为是否驱动该方向）：
- *   extend=0 retract=0  → 停止（两路回默认电平）
- *   extend=1 retract=0  → 推出
- *   extend=0 retract=1  → 收回
- *   extend=1 retract=1  → 制动
+ *   extend=0 retract=0  → 停止（低 / 低）
+ *   extend=1 retract=0  → 推出（高 / 低）
+ *   extend=0 retract=1  → 收回（低 / 高）
+ *   extend=1 retract=1  → 制动（高 / 高）
  *
  * 到位/限位信号读低触发（上拉输入，读到低 = 到位）：
  *   平台到位: 推出PA4 收回PA5；平台限位: 推出PB12 收回PB13
@@ -27,14 +27,9 @@
  *   门限位  : 开到位PB15 关到位PB14（门组公共）
  */
 
-/** PWM 默认占空比（99%，对应默认高电平） */
-#ifndef MODULE_MOTO_PWM_DEFAULT_DUTY
-#define MODULE_MOTO_PWM_DEFAULT_DUTY 99U
-#endif
-
-/** 电机驱动时的 PWM 占空比（全速） */
-#ifndef MODULE_MOTO_PWM_RUN_DUTY
-#define MODULE_MOTO_PWM_RUN_DUTY 100U
+/** 驱动方向的固定高电平占空比。 */
+#ifndef MODULE_MOTO_PWM_HIGH_DUTY
+#define MODULE_MOTO_PWM_HIGH_DUTY 99U
 #endif
 
 typedef struct {
@@ -48,6 +43,8 @@ typedef struct {
 typedef struct {
     const module_moto_hw_config_t *hw;
     module_moto_dir_e direction;
+    bool extend_output_active;
+    bool retract_output_active;
 } module_moto_context_t;
 
 static const module_moto_hw_config_t motor_hw_configs[MODULE_MOTO_ID_COUNT] = {
@@ -101,20 +98,28 @@ static uint8_t module_moto_read_feedback(board_pin_id_e pin_id)
            (MODULE_MOTO_FB_ACTIVE_LEVEL) ? 1U : 0U;
 }
 
+/* 三台推杆的到位反馈，均为读低有效。 */
+#define HELI_EXTEND_STOP_SIGNAL  (module_moto_read_feedback(BOARD_PIN_PLATFORM_EXTEND_SIGNAL) != 0U)
+#define HELI_RETRACT_STOP_SIGNAL (module_moto_read_feedback(BOARD_PIN_PLATFORM_RETRACT_SIGNAL) != 0U)
+#define DOOR1_EXTEND_STOP_SIGNAL (module_moto_read_feedback(BOARD_PIN_DOOR1_EXTEND_SIGNAL) != 0U)
+#define DOOR1_RETRACT_STOP_SIGNAL (module_moto_read_feedback(BOARD_PIN_DOOR1_RETRACT_SIGNAL) != 0U)
+#define DOOR2_EXTEND_STOP_SIGNAL (module_moto_read_feedback(BOARD_PIN_DOOR2_EXTEND_SIGNAL) != 0U)
+#define DOOR2_RETRACT_STOP_SIGNAL (module_moto_read_feedback(BOARD_PIN_DOOR2_RETRACT_SIGNAL) != 0U)
+
 static bool module_moto_direction_is_blocked(
-    const module_moto_context_t *motor_context,
+    module_moto_id_e motor_id,
     module_moto_dir_e direction)
 {
-    if (motor_context == 0) {
+    if (!module_moto_id_is_valid(motor_id)) {
         return true;
     }
 
     if (direction == MODULE_MOTO_DIR_FORWARD) {
-        return (module_moto_read_feedback(motor_context->hw->extend_fb_pin) != 0U);
+        return module_moto_is_at_forward(motor_id);
     }
 
     if (direction == MODULE_MOTO_DIR_BACKWARD) {
-        return (module_moto_read_feedback(motor_context->hw->retract_fb_pin) != 0U);
+        return module_moto_is_at_backward(motor_id);
     }
 
     return false;
@@ -132,18 +137,21 @@ static uint32_t module_moto_duty_to_pulse(const board_pwm_config_t *pwm,
     return (period * duty_percent) / 100U;
 }
 
-static void module_moto_set_channel_duty(board_pwm_id_e pwm_id,
-                                         const board_pwm_channel_config_t *ch,
-                                         uint8_t duty_percent)
+static void module_moto_set_channel_output(board_pwm_id_e pwm_id,
+                                           const board_pwm_channel_config_t *ch,
+                                           bool active)
 {
     const board_pwm_config_t *pwm = &board_pwm_configs[pwm_id];
+    uint8_t duty_percent = active ? MODULE_MOTO_PWM_HIGH_DUTY : 0U;
     uint32_t pulse = module_moto_duty_to_pulse(pwm, duty_percent);
 
     timer_channel_output_pulse_value_config(pwm->peripheral, ch->channel,
                                             (uint16_t)pulse);
+    timer_channel_output_state_config(pwm->peripheral, ch->channel,
+                                      active ? TIMER_CCX_ENABLE : TIMER_CCX_DISABLE);
 }
 
-/* extend/retract 为是否驱动（true=该方向出力），两路独立设置占空比 */
+/* extend/retract 为是否驱动（true=该方向输出高电平）。 */
 static void module_moto_drive(
     module_moto_context_t *motor_context,
     bool extend_active,
@@ -156,10 +164,21 @@ static void module_moto_drive(
     }
 
     hw = motor_context->hw;
-    module_moto_set_channel_duty(hw->pwm, module_moto_ch(hw, true),
-        extend_active ? MODULE_MOTO_PWM_RUN_DUTY : MODULE_MOTO_PWM_DEFAULT_DUTY);
-    module_moto_set_channel_duty(hw->pwm, module_moto_ch(hw, false),
-        retract_active ? MODULE_MOTO_PWM_RUN_DUTY : MODULE_MOTO_PWM_DEFAULT_DUTY);
+    if (!extend_active) {
+        module_moto_set_channel_output(hw->pwm, module_moto_ch(hw, true), false);
+    }
+    if (!retract_active) {
+        module_moto_set_channel_output(hw->pwm, module_moto_ch(hw, false), false);
+    }
+    if (extend_active) {
+        module_moto_set_channel_output(hw->pwm, module_moto_ch(hw, true), true);
+    }
+    if (retract_active) {
+        module_moto_set_channel_output(hw->pwm, module_moto_ch(hw, false), true);
+    }
+
+    motor_context->extend_output_active = extend_active;
+    motor_context->retract_output_active = retract_active;
 }
 
 static void module_moto_gpio_clock_enable(uint32_t port)
@@ -184,14 +203,14 @@ static void module_moto_pwm_channel_init(board_pwm_id_e pwm_id,
               board_gpio_configs[ch->pin_id].speed, BOARD_PIN_PIN(ch->pin_id));
 
     timer_channel_output_struct_para_init(&ocpara);
-    ocpara.outputstate = TIMER_CCX_ENABLE;
+    ocpara.outputstate = TIMER_CCX_DISABLE;
     ocpara.ocpolarity = TIMER_OC_POLARITY_HIGH;
-    ocpara.ocidlestate = TIMER_OC_IDLE_STATE_HIGH;
+    ocpara.ocidlestate = TIMER_OC_IDLE_STATE_LOW;
     timer_channel_output_config(pwm->peripheral, ch->channel, &ocpara);
     timer_channel_output_mode_config(pwm->peripheral, ch->channel, TIMER_OC_MODE_PWM0);
     timer_channel_output_shadow_config(pwm->peripheral, ch->channel,
                                        TIMER_OC_SHADOW_DISABLE);
-    module_moto_set_channel_duty(pwm_id, ch, MODULE_MOTO_PWM_DEFAULT_DUTY);
+    module_moto_set_channel_output(pwm_id, ch, false);
 }
 
 static void module_moto_pwm_peripheral_init(board_pwm_id_e pwm_id)
@@ -254,7 +273,17 @@ bool module_moto_init(void)
         module_moto_drive(motor_context, false, false);
     }
 
-    /* 门组公共限位：上拉输入，读低触发 */
+    /* 平台、门组公共限位：上拉输入，读低触发 */
+    module_moto_gpio_clock_enable(BOARD_PIN_PORT(BOARD_PIN_PLATFORM_EXTEND_LIMIT));
+    gpio_init(BOARD_PIN_PORT(BOARD_PIN_PLATFORM_EXTEND_LIMIT),
+              board_gpio_configs[BOARD_PIN_PLATFORM_EXTEND_LIMIT].mode,
+              board_gpio_configs[BOARD_PIN_PLATFORM_EXTEND_LIMIT].speed,
+              BOARD_PIN_PIN(BOARD_PIN_PLATFORM_EXTEND_LIMIT));
+    gpio_init(BOARD_PIN_PORT(BOARD_PIN_PLATFORM_RETRACT_LIMIT),
+              board_gpio_configs[BOARD_PIN_PLATFORM_RETRACT_LIMIT].mode,
+              board_gpio_configs[BOARD_PIN_PLATFORM_RETRACT_LIMIT].speed,
+              BOARD_PIN_PIN(BOARD_PIN_PLATFORM_RETRACT_LIMIT));
+
     module_moto_gpio_clock_enable(BOARD_PIN_PORT(BOARD_PIN_DOOR_OPEN_LIMIT));
     gpio_init(BOARD_PIN_PORT(BOARD_PIN_DOOR_OPEN_LIMIT),
               board_gpio_configs[BOARD_PIN_DOOR_OPEN_LIMIT].mode,
@@ -264,6 +293,14 @@ bool module_moto_init(void)
               board_gpio_configs[BOARD_PIN_DOOR_CLOSE_LIMIT].mode,
               board_gpio_configs[BOARD_PIN_DOOR_CLOSE_LIMIT].speed,
               BOARD_PIN_PIN(BOARD_PIN_DOOR_CLOSE_LIMIT));
+
+    /* 电吸锁低有效，初始化为释放状态，避免上电时误锁。 */
+    gpio_init(BOARD_PIN_PORT(BOARD_PIN_DOOR_LOCK),
+              board_gpio_configs[BOARD_PIN_DOOR_LOCK].mode,
+              board_gpio_configs[BOARD_PIN_DOOR_LOCK].speed,
+              BOARD_PIN_PIN(BOARD_PIN_DOOR_LOCK));
+    gpio_bit_write(BOARD_PIN_PORT(BOARD_PIN_DOOR_LOCK),
+                   BOARD_PIN_PIN(BOARD_PIN_DOOR_LOCK), SET);
 
     /* 启动各 PWM 外设 */
     for (int pwm_index = 0; pwm_index < BOARD_PWM_COUNT; pwm_index++) {
@@ -333,7 +370,7 @@ bool module_moto_start(module_moto_id_e motor_id, module_moto_dir_e direction)
 
     switch (direction) {
     case MODULE_MOTO_DIR_FORWARD:
-        if (module_moto_direction_is_blocked(motor_context, direction)) {
+        if (module_moto_direction_is_blocked(motor_id, direction)) {
             module_moto_drive(motor_context, false, false);
             motor_context->direction = MODULE_MOTO_DIR_STOP;
             return false;
@@ -343,7 +380,7 @@ bool module_moto_start(module_moto_id_e motor_id, module_moto_dir_e direction)
         return true;
 
     case MODULE_MOTO_DIR_BACKWARD:
-        if (module_moto_direction_is_blocked(motor_context, direction)) {
+        if (module_moto_direction_is_blocked(motor_id, direction)) {
             module_moto_drive(motor_context, false, false);
             motor_context->direction = MODULE_MOTO_DIR_STOP;
             return false;
@@ -365,8 +402,19 @@ bool module_moto_is_at_forward(module_moto_id_e motor_id)
         return false;
     }
 
-    return (module_moto_read_feedback(
-                motor_contexts[motor_id].hw->extend_fb_pin) != 0U);
+    switch (motor_id) {
+    case PLATFORM_MOTOR_ID:
+        return HELI_EXTEND_STOP_SIGNAL;
+
+    case DOOR1_MOTOR_ID:
+        return DOOR1_EXTEND_STOP_SIGNAL;
+
+    case DOOR2_MOTOR_ID:
+        return DOOR2_EXTEND_STOP_SIGNAL;
+
+    default:
+        return false;
+    }
 }
 
 bool module_moto_is_at_backward(module_moto_id_e motor_id)
@@ -375,8 +423,19 @@ bool module_moto_is_at_backward(module_moto_id_e motor_id)
         return false;
     }
 
-    return (module_moto_read_feedback(
-                motor_contexts[motor_id].hw->retract_fb_pin) != 0U);
+    switch (motor_id) {
+    case PLATFORM_MOTOR_ID:
+        return HELI_RETRACT_STOP_SIGNAL;
+
+    case DOOR1_MOTOR_ID:
+        return DOOR1_RETRACT_STOP_SIGNAL;
+
+    case DOOR2_MOTOR_ID:
+        return DOOR2_RETRACT_STOP_SIGNAL;
+
+    default:
+        return false;
+    }
 }
 
 module_moto_pos_e module_moto_get_position(module_moto_id_e motor_id)
@@ -413,6 +472,61 @@ module_moto_dir_e module_moto_get_direction(module_moto_id_e motor_id)
     }
 
     return motor_contexts[motor_id].direction;
+}
+
+void module_moto_get_driver_status(module_moto_id_e motor_id,
+                                   module_moto_driver_status_t *status)
+{
+    const module_moto_context_t *motor_context;
+
+    if (status == 0) {
+        return;
+    }
+
+    status->extend_output_active = 0U;
+    status->retract_output_active = 0U;
+    status->extend_feedback_active = 0U;
+    status->retract_feedback_active = 0U;
+
+    if (!module_moto_is_ready(motor_id)) {
+        return;
+    }
+
+    motor_context = &motor_contexts[motor_id];
+    status->extend_output_active = motor_context->extend_output_active ? 1U : 0U;
+    status->retract_output_active = motor_context->retract_output_active ? 1U : 0U;
+    status->extend_feedback_active = module_moto_is_at_forward(motor_id) ? 1U : 0U;
+    status->retract_feedback_active = module_moto_is_at_backward(motor_id) ? 1U : 0U;
+}
+
+void module_moto_door_lock(void)
+{
+    if (!motor_initialized) {
+        return;
+    }
+
+    gpio_bit_write(BOARD_PIN_PORT(BOARD_PIN_DOOR_LOCK),
+                   BOARD_PIN_PIN(BOARD_PIN_DOOR_LOCK), RESET);
+}
+
+void module_moto_door_unlock(void)
+{
+    if (!motor_initialized) {
+        return;
+    }
+
+    gpio_bit_write(BOARD_PIN_PORT(BOARD_PIN_DOOR_LOCK),
+                   BOARD_PIN_PIN(BOARD_PIN_DOOR_LOCK), SET);
+}
+
+bool module_moto_platform_extend_limit_active(void)
+{
+    return (module_moto_read_feedback(BOARD_PIN_PLATFORM_EXTEND_LIMIT) != 0U);
+}
+
+bool module_moto_platform_retract_limit_active(void)
+{
+    return (module_moto_read_feedback(BOARD_PIN_PLATFORM_RETRACT_LIMIT) != 0U);
 }
 
 bool module_moto_door_open_limit_active(void)

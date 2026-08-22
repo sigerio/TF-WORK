@@ -1,9 +1,9 @@
-#include "module_moto_sync.h"
+#include "motor_motion.h"
 
 #include "../../../USER/OS/tf_os.h"
 #include "../../TASK/tf_usr_event_task.h"
 #include "../module_ws2812/module_ws2812_status.h"
-#include "module_moto.h"
+#include "motor_driver.h"
 
 
 /**
@@ -34,7 +34,7 @@ typedef struct
 {
     motion_phase_e phase;                 /* 当前阶段 */
     module_moto_dir_e direction;          /* 目标运行方向 */
-    module_moto_pos_e target_position;    /* 目标到位位置（限位反馈） */
+    module_moto_pos_e target_position;    /* 目标到位位置（电机反馈） */
     motion_error_e motion_error;          /* 本次动作保留的错误信息 */
     uint8_t start_err_cnt;                /* 本次尝试内连续启动失败次数 */
 } motion_context_t;
@@ -59,8 +59,21 @@ static motion_context_t platform_motion = {
 };
 
 
-/* 门 / 平台业务运行状态，由 sync 初始化和运动流程维护。 */
-static module_moto_run_status_t run_status;
+/* 保留全局符号，便于调试器 Watch 直接查看门 / 平台业务状态。 */
+module_moto_run_status_t run_status;
+
+static void refresh_motor_debug_status(void)
+{
+    module_moto_get_driver_status(PLATFORM_MOTOR_ID, &run_status.platform_motor);
+    module_moto_get_driver_status(DOOR1_MOTOR_ID, &run_status.door1_motor);
+    module_moto_get_driver_status(DOOR2_MOTOR_ID, &run_status.door2_motor);
+    run_status.platform_extend_limit_active =
+        module_moto_platform_extend_limit_active() ? 1U : 0U;
+    run_status.platform_retract_limit_active =
+        module_moto_platform_retract_limit_active() ? 1U : 0U;
+    run_status.door_open_limit_active = module_moto_door_open_limit_active() ? 1U : 0U;
+    run_status.door_close_limit_active = module_moto_door_close_limit_active() ? 1U : 0U;
+}
 
 static void trigger_door_state_event(door_running_in_e running)
 {
@@ -105,37 +118,44 @@ static void stop_door_motors(void)
     (void)module_moto_stop(DOOR2_MOTOR_ID);
 }
 
-/** 门是否到达目标位置（开/关以门组公共限位为权威判据）。 */
+/** 门是否到达目标位置（双门对应方向的到位反馈均有效）。 */
 static bool door_at_target(module_moto_pos_e target)
 {
     if (target == MODULE_MOTO_POS_FORWARD)
     {
-        return module_moto_door_open_limit_active();
+        return module_moto_is_at_forward(DOOR1_MOTOR_ID) &&
+               module_moto_is_at_forward(DOOR2_MOTOR_ID);
     }
 
     if (target == MODULE_MOTO_POS_BACKWARD)
     {
-        return module_moto_door_close_limit_active();
+        return module_moto_is_at_backward(DOOR1_MOTOR_ID) &&
+               module_moto_is_at_backward(DOOR2_MOTOR_ID);
     }
 
     return false;
 }
 
-/** 根据门组公共限位刷新门组业务状态。 */
+static bool door_feedback_is_invalid(void)
+{
+    return (module_moto_is_at_forward(DOOR1_MOTOR_ID) &&
+            module_moto_is_at_backward(DOOR1_MOTOR_ID)) ||
+           (module_moto_is_at_forward(DOOR2_MOTOR_ID) &&
+            module_moto_is_at_backward(DOOR2_MOTOR_ID));
+}
+
+/** 根据双门到位反馈刷新门组业务状态。 */
 static void refresh_door_run_status(void)
 {
-    bool open_active = module_moto_door_open_limit_active();
-    bool close_active = module_moto_door_close_limit_active();
-
-    if (open_active && close_active)
+    if (door_feedback_is_invalid())
     {
         run_status.door = MODULE_MOTO_DOOR_STATE_FAULT;
     }
-    else if (open_active)
+    else if (door_at_target(MODULE_MOTO_POS_FORWARD))
     {
         run_status.door = MODULE_MOTO_DOOR_STATE_OPENED;
     }
-    else if (close_active)
+    else if (door_at_target(MODULE_MOTO_POS_BACKWARD))
     {
         run_status.door = MODULE_MOTO_DOOR_STATE_CLOSED;
     }
@@ -145,7 +165,15 @@ static void refresh_door_run_status(void)
     }
 }
 
-/** 根据平台当前限位刷新业务状态。 */
+static void lock_door_if_closed(void)
+{
+    if (run_status.door == MODULE_MOTO_DOOR_STATE_CLOSED)
+    {
+        module_moto_door_lock();
+    }
+}
+
+/** 根据平台当前到位反馈刷新业务状态。 */
 static void refresh_platform_run_status(void)
 {
     module_moto_pos_e platform_position;
@@ -173,27 +201,25 @@ static void refresh_platform_run_status(void)
 
 /**
  * @brief  启动双门运动（MOTION_START 阶段处理）。
- * @return 下一阶段：已到目标限位则 OVER；启动成功则 ING；
+ * @return 下一阶段：已到目标反馈则 OVER；启动成功则 ING；
  *         启动失败则 ERR
- * @note   门到位以门组公共限位为准；单个电机的到位信号仅用于
- *         该电机的到位停机（顶到位信号后不再对该方向出力）。
+ * @note   门开关到位以两扇门的对应方向反馈均有效为准。
  */
 static motion_phase_e start_door_motion(void)
 {
-    /* 门组限位异常（开+关同时触发）：故障 */
-    if (module_moto_door_open_limit_active() &&
-        module_moto_door_close_limit_active())
+    if (door_feedback_is_invalid())
     {
         stop_door_motors();
         run_status.door = MODULE_MOTO_DOOR_STATE_FAULT;
         return MOTION_ERR;
     }
 
-    /* 已在目标限位：无需动作 */
+    /* 已在目标反馈：无需动作 */
     if (door_at_target(door_motion.target_position))
     {
         stop_door_motors();
         refresh_door_run_status();
+        lock_door_if_closed();
         return MOTION_OVER;
     }
 
@@ -231,10 +257,10 @@ static motion_phase_e start_door_motion(void)
 
 /**
  * @brief  双门运行期更新（MOTION_ING 阶段处理）。
- * @return 下一阶段：门组到达目标限位则 OVER，否则保持 ING
+ * @return 下一阶段：双门均到达目标反馈则 OVER，否则保持 ING
  *
  * 默认策略：
- * 1. 门组到达目标限位（开/关到位限位）→ 停机 OVER
+ * 1. 双门均到达目标到位反馈 → 停机 OVER
  * 2. 单个电机到位信号触发 → 单独停止该电机
  *
  * 开启门同步宏后，额外按霍尔边沿差调节双门，并检测堵转。
@@ -242,20 +268,19 @@ static motion_phase_e start_door_motion(void)
 static motion_phase_e update_door_motion(void)
 {
 
-    /* 门组限位异常（开+关同时触发）：故障 */
-    if (module_moto_door_open_limit_active() &&
-        module_moto_door_close_limit_active())
+    if (door_feedback_is_invalid())
     {
         stop_door_motors();
         run_status.door = MODULE_MOTO_DOOR_STATE_FAULT;
         return MOTION_ERR;
     }
 
-    /* 门组到达目标限位 */
+    /* 双门均到达目标到位反馈 */
     if (door_at_target(door_motion.target_position))
     {
         stop_door_motors();
         refresh_door_run_status();
+        lock_door_if_closed();
         return MOTION_OVER;
     }
 
@@ -408,7 +433,9 @@ static motion_phase_e handle_platform_motion_error(void)
 void module_moto_sync_init(void)
 {
     refresh_door_run_status();
+    lock_door_if_closed();
     refresh_platform_run_status();
+    refresh_motor_debug_status();
 }
 
 void module_moto_sync_get_run_status(module_moto_run_status_t *status)
@@ -430,6 +457,8 @@ void module_moto_sync_stop_door(void)
     door_motion.motion_error = MOTION_ERROR_NONE;
     door_motion.start_err_cnt = 0U;
     refresh_door_run_status();
+    lock_door_if_closed();
+    refresh_motor_debug_status();
 }
 
 void module_moto_sync_stop_platform(void)
@@ -441,10 +470,12 @@ void module_moto_sync_stop_platform(void)
     platform_motion.motion_error = MOTION_ERROR_NONE;
     platform_motion.start_err_cnt = 0U;
     refresh_platform_run_status();
+    refresh_motor_debug_status();
 }
 
 void module_moto_sync_request_door_open(void)
 {
+    module_moto_door_unlock();
     set_door_motion_phase(MOTION_START);
     door_motion.direction = MODULE_MOTO_DIR_FORWARD;
     door_motion.target_position = MODULE_MOTO_POS_FORWARD;
@@ -522,4 +553,6 @@ void module_moto_sync_update(void)
         set_platform_motion_phase(handle_platform_motion_error());
         break;
     }
+
+    refresh_motor_debug_status();
 }

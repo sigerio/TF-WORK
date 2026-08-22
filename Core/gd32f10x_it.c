@@ -34,7 +34,7 @@ OF SUCH DAMAGE.
 
 #include "gd32f10x_it.h"
 #include "../USER/debug_console.h"
-#include "../USER/COMM/iec104/port/iec104_port_usart1.h"
+#include "../USER/COMM/iec104/port/iec104_port.h"
 #include "../USER/COMM/modbus/tf_modbus_master.h"
 
 extern void tf_delay_systick_irq_handler(void);
@@ -163,20 +163,30 @@ void UART3_IRQHandler(void)
 
 void USART1_IRQHandler(void)
 {
-    iec104_port_usart1_irq();
+#if (BOARD_USART2_ROLE != BOARD_USART2_ROLE_IEC104)
+    iec104_port_irq();
+#endif
 }
 
 void USART2_IRQHandler(void)
 {
+#if (BOARD_USART2_ROLE == BOARD_USART2_ROLE_IEC104)
+    iec104_port_irq();
+#elif (BOARD_USART2_ROLE == BOARD_USART2_ROLE_DEBUG)
     debug_console_irq();
+#endif
 }
 
 void DMA0_Channel1_IRQHandler(void)
 {
+#if (BOARD_USART2_ROLE == BOARD_USART2_ROLE_DEBUG)
     debug_console_tx_dma_irq();
+#endif
 }
 
 void DMA0_Channel5_IRQHandler(void)
 {
-    iec104_port_usart1_rx_dma_irq();
+#if (BOARD_USART2_ROLE != BOARD_USART2_ROLE_IEC104)
+    iec104_port_rx_dma_irq();
+#endif
 }

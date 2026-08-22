@@ -1,10 +1,11 @@
-#ifndef MODULE_MOTO_BUSINESS_H
-#define MODULE_MOTO_BUSINESS_H
+#ifndef MOTOR_BUSINESS_H
+#define MOTOR_BUSINESS_H
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
+/* 业务命令入口：处理急停门控后，将门/平台动作交给运动同步层执行。 */
 void module_moto_business_request_door_open(void);
 void module_moto_business_request_door_close(void);
 void module_moto_business_request_platform_extend(void);
@@ -21,10 +22,11 @@ void module_moto_business_toggle_platform(void);
 void module_moto_business_estop_activate(void);
 void module_moto_business_estop_release(void);
 
+/* 周期更新业务侧的按键切换终态；应与运动同步任务同周期调用。 */
 void module_moto_business_update(void);
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif /* MODULE_MOTO_BUSINESS_H */
+#endif /* MOTOR_BUSINESS_H */

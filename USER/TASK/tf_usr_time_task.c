@@ -2,8 +2,8 @@
 
 #include "../OS/tf_os.h"
 #include "../USER/CTRL/KEY/key.h"
-#include "../USER/CTRL/MOTO/module_moto_business.h"
-#include "../USER/CTRL/MOTO/module_moto_sync.h"
+#include "../USER/CTRL/MOTO/motor_business.h"
+#include "../USER/CTRL/MOTO/motor_motion.h"
 #include "../COMM/iec104/iec104_server.h"
 #include "../COMM/modbus/tf_modbus_master.h"
 #include "../CTRL/module_ws2812/module_ws2812_status.h"
@@ -33,10 +33,10 @@ static void iec104_server_comm_timer_task(void *arg)
     iec104_server_comm_task();
 }
 
-static void iec104_server_poll_timer_task(void *arg)
+static void iec104_server_report_timer_task(void *arg)
 {
     (void)arg;
-    iec104_server_poll_task();
+    iec104_server_report_task();
 }
 
 static void tf_key_scan_timer_task(void *arg)
@@ -98,9 +98,9 @@ void tf_usr_time_task_init(void)
                           0,
                           IEC104_SERVER_COMM_PERIOD_MS,
                           10U);
-    tf_os_soft_timer_task(iec104_server_poll_timer_task,
+    tf_os_soft_timer_task(iec104_server_report_timer_task,
                           0,
-                          IEC104_SERVER_POLL_PERIOD_MS,
+                          IEC104_SERVER_REPORT_PERIOD_MS,
                           15U);
     tf_os_soft_timer_task(tf_key_scan_timer_task,
                           (void *)&tf_key_scan_period_ms,

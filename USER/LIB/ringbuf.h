@@ -40,6 +40,8 @@ uint32_t ringbuf_free(const ringbuf_t *rb);
 uint32_t ringbuf_overflow_count(const ringbuf_t *rb);
 uint32_t ringbuf_write(ringbuf_t *rb, const uint8_t *data, uint32_t len);
 uint32_t ringbuf_write_force(ringbuf_t *rb, const uint8_t *data, uint32_t len);
+/* 读取完整 len 字节才消费；数据不足时返回 0 且不改变读指针。 */
+uint32_t ringbuf_read_exact(ringbuf_t *rb, uint8_t *data, uint32_t len);
 uint32_t ringbuf_read(ringbuf_t *rb, uint8_t *data, uint32_t len);
 uint32_t ringbuf_peek(const ringbuf_t *rb, uint8_t *data, uint32_t len);
 uint32_t ringbuf_drop(ringbuf_t *rb, uint32_t len);

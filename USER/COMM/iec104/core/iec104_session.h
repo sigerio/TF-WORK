@@ -22,7 +22,7 @@ extern "C" {
 typedef struct {
     /* 收到带数据的 I 帧且链路处于数据传输态时调用。 */
     void (*on_asdu)(const iec104_frame_t *frame, uint32_t now);
-    /* 收到 STOPDT，需清理应用侧选择/暂存状态时调用。 */
+    /* 串口会话收到 STOPDT 后清理应用侧选择/暂存状态时调用。 */
     void (*on_data_transfer_stop)(void);
 } iec104_session_callbacks_t;
 

@@ -79,6 +79,7 @@ void     com_link_tx_service(com_link_t *link);
 
 /* ── 接收：这些操作封装 RX ISR 与任务之间的 FIFO 临界区 ── */
 uint16_t com_link_rx_available(com_link_t *link);
+uint16_t com_link_rx_read_exact(com_link_t *link, uint8_t *buf, uint16_t len);
 uint16_t com_link_rx_read(com_link_t *link, uint8_t *buf, uint16_t len);
 uint16_t com_link_rx_peek(com_link_t *link, uint8_t *buf, uint16_t len);
 uint16_t com_link_rx_drop(com_link_t *link, uint16_t len);

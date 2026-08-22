@@ -3,9 +3,11 @@
 #include <string.h>
 
 #include "../USER/CTRL/KEY/key.h"
-#include "../../USER/CTRL/MOTO/module_moto.h"
-#include "../../USER/CTRL/MOTO/module_moto_business.h"
-#include "../../USER/CTRL/MOTO/module_moto_sync.h"
+#include "../../USER/CTRL/LIGHT/light_output.h"
+#include "../../USER/CTRL/MOTO/motor_driver.h"
+#include "../../USER/CTRL/MOTO/motor_business.h"
+#include "../../USER/CTRL/MOTO/motor_motion.h"
+#include "../../USER/CTRL/module_ws2812/module_ws2812_status.h"
 #include "../../modbus/tf_modbus_ac.h"
 #include "../../modbus/tf_modbus_xm7828.h"
 #include "../../modbus/tf_modbus_xm8189.h"
@@ -24,6 +26,10 @@
 #define IEC104_IOA_YX_EM_STOP           0x000010UL
 #define IEC104_IOA_YX_DOOR_RUNNING      0x000011UL
 #define IEC104_IOA_YX_HELIPED_RUNNING   0x000012UL
+#define IEC104_IOA_YX_WS2812_EFFECT_ACTIVE 0x000013UL
+#define IEC104_IOA_YX_INDICATOR_LIGHT_ON   0x000014UL
+#define IEC104_IOA_YX_INTERIOR_LIGHT_ON    0x000015UL
+#define IEC104_IOA_YX_DECORATIVE_LIGHT_ON  0x000016UL
 
 #define IEC104_IOA_YC_DOOR_STATE    0x000100UL
 #define IEC104_IOA_YC_HELIPED_STATE 0x000101UL
@@ -32,6 +38,12 @@
 #define IEC104_IOA_YK_DOOR_CLOSE      0x000201UL
 #define IEC104_IOA_YK_HELIPED_EXTEND  0x000210UL
 #define IEC104_IOA_YK_HELIPED_RETRACT 0x000211UL
+#define IEC104_IOA_YK_INDICATOR_LIGHT_ON  0x000220UL
+#define IEC104_IOA_YK_INDICATOR_LIGHT_OFF 0x000221UL
+#define IEC104_IOA_YK_INTERIOR_LIGHT_ON   0x000222UL
+#define IEC104_IOA_YK_INTERIOR_LIGHT_OFF  0x000223UL
+#define IEC104_IOA_YK_DECORATIVE_LIGHT_ON 0x000224UL
+#define IEC104_IOA_YK_DECORATIVE_LIGHT_OFF 0x000225UL
 
 #define IEC104_IOA_YX_485_TH_ONLINE    0x001000UL
 #define IEC104_IOA_YX_485_TH_FAULT     0x001001UL
@@ -88,6 +100,8 @@
 /* 一次采集保存所有业务模块数据，保证同一总召唤中的遥信和遥测来自同批快照。 */
 typedef struct {
     module_moto_run_status_t motor;
+    light_output_status_t lights;
+    uint8_t ws2812_effect_active;
     xm7828_th_data_t th;
     xm8189_wind_data_t wind;
     xm8537_water_data_t water;
@@ -104,6 +118,8 @@ static void iec104_app_snapshot_read(iec104_app_snapshot_t *snapshot)
 {
     memset(snapshot, 0, sizeof(*snapshot));
     module_moto_sync_get_run_status(&snapshot->motor);
+    light_output_get_status(&snapshot->lights);
+    snapshot->ws2812_effect_active = module_ws2812_effect_is_active();
     (void)tf_modbus_xm7828_get(&snapshot->th);
     (void)tf_modbus_xm8189_get(&snapshot->wind);
     (void)tf_modbus_xm8537_get(&snapshot->water);
@@ -176,6 +192,7 @@ static uint8_t iec104_ac_has_fault(const ac_device_t *ac)
 static void iec104_app_fill_status_points(const iec104_app_snapshot_t *snapshot, iec104_status_point_t *points)
 {
     const module_moto_run_status_t *run_status = &snapshot->motor;
+    const light_output_status_t *lights = &snapshot->lights;
     const xm7828_th_data_t *th = &snapshot->th;
     const xm8189_wind_data_t *wind = &snapshot->wind;
     const xm8537_water_data_t *water = &snapshot->water;
@@ -196,34 +213,38 @@ static void iec104_app_fill_status_points(const iec104_app_snapshot_t *snapshot,
     points[4] = (iec104_status_point_t){ IEC104_IOA_YX_EM_STOP, tf_key_is_pressed_now(TF_KEY_ID_EM_STOP), 0U };
     points[5] = (iec104_status_point_t){ IEC104_IOA_YX_DOOR_RUNNING, door_running, 0U };
     points[6] = (iec104_status_point_t){ IEC104_IOA_YX_HELIPED_RUNNING, platform_running, 0U };
+    points[7] = (iec104_status_point_t){ IEC104_IOA_YX_WS2812_EFFECT_ACTIVE, snapshot->ws2812_effect_active, 0U };
+    points[8] = (iec104_status_point_t){ IEC104_IOA_YX_INDICATOR_LIGHT_ON, lights->indicator_on, 0U };
+    points[9] = (iec104_status_point_t){ IEC104_IOA_YX_INTERIOR_LIGHT_ON, lights->interior_light_on, 0U };
+    points[10] = (iec104_status_point_t){ IEC104_IOA_YX_DECORATIVE_LIGHT_ON, lights->decorative_light_on, 0U };
 
-    points[7] = (iec104_status_point_t){ IEC104_IOA_YX_485_TH_ONLINE, th->status.online, th_quality };
-    points[8] = (iec104_status_point_t){ IEC104_IOA_YX_485_TH_FAULT, th->status.sensor_fault, th_quality };
+    points[11] = (iec104_status_point_t){ IEC104_IOA_YX_485_TH_ONLINE, th->status.online, th_quality };
+    points[12] = (iec104_status_point_t){ IEC104_IOA_YX_485_TH_FAULT, th->status.sensor_fault, th_quality };
 
-    points[9] = (iec104_status_point_t){ IEC104_IOA_YX_485_WIND_ONLINE, wind->status.online, wind_quality };
-    points[10] = (iec104_status_point_t){ IEC104_IOA_YX_485_WIND_FAULT, wind->status.sensor_fault, wind_quality };
+    points[13] = (iec104_status_point_t){ IEC104_IOA_YX_485_WIND_ONLINE, wind->status.online, wind_quality };
+    points[14] = (iec104_status_point_t){ IEC104_IOA_YX_485_WIND_FAULT, wind->status.sensor_fault, wind_quality };
 
-    points[11] = (iec104_status_point_t){ IEC104_IOA_YX_485_WATER_ONLINE, water->status.online, water_quality };
-    points[12] = (iec104_status_point_t){ IEC104_IOA_YX_485_WATER_ALARM, water->water_detected, water_quality };
+    points[15] = (iec104_status_point_t){ IEC104_IOA_YX_485_WATER_ONLINE, water->status.online, water_quality };
+    points[16] = (iec104_status_point_t){ IEC104_IOA_YX_485_WATER_ALARM, water->water_detected, water_quality };
 
-    points[13] = (iec104_status_point_t){ IEC104_IOA_YX_485_RAIN_ONLINE, rain->status.online, rain_quality };
-    points[14] = (iec104_status_point_t){ IEC104_IOA_YX_485_RAIN_FAULT, rain->status.sensor_fault, rain_quality };
+    points[17] = (iec104_status_point_t){ IEC104_IOA_YX_485_RAIN_ONLINE, rain->status.online, rain_quality };
+    points[18] = (iec104_status_point_t){ IEC104_IOA_YX_485_RAIN_FAULT, rain->status.sensor_fault, rain_quality };
 
-    points[15] = (iec104_status_point_t){ IEC104_IOA_YX_485_AC_ONLINE, ac->status.online, ac_quality };
-    points[16] = (iec104_status_point_t){ IEC104_IOA_YX_485_AC_FAULT, iec104_ac_has_fault(ac), ac_quality };
-    points[17] = (iec104_status_point_t){ IEC104_IOA_YX_485_AC_COOLING, ac->run_status.cooling_on, ac_quality };
-    points[18] = (iec104_status_point_t){ IEC104_IOA_YX_485_AC_HEATING, ac->run_status.heater_on, ac_quality };
-    points[19] = (iec104_status_point_t){ IEC104_IOA_YX_485_AC_INNER_FAN, ac->run_status.inner_fan_on, ac_quality };
-    points[20] = (iec104_status_point_t){ IEC104_IOA_YX_485_AC_OUTER_FAN, ac->run_status.outer_fan_on, ac_quality };
-    points[21] = (iec104_status_point_t){ IEC104_IOA_YX_485_AC_HUMIDITY_HIGH, ac->run_status.humidity_high_alarm, ac_quality };
-    points[22] = (iec104_status_point_t){ IEC104_IOA_YX_485_AC_HIGH_TEMP, ac->run_status.high_temp_alarm, ac_quality };
-    points[23] = (iec104_status_point_t){ IEC104_IOA_YX_485_AC_LOW_TEMP, ac->run_status.low_temp_alarm, ac_quality };
-    points[24] = (iec104_status_point_t){ IEC104_IOA_YX_485_AC_CONDENSER_HIGH, ac->run_status.condenser_high_pressure_alarm, ac_quality };
-    points[25] = (iec104_status_point_t){ IEC104_IOA_YX_485_AC_EVAPORATOR_FREEZE, ac->run_status.evaporator_freeze_alarm, ac_quality };
-    points[26] = (iec104_status_point_t){ IEC104_IOA_YX_485_AC_CABINET_SENSOR_FAULT, ac->run_status.cabinet_sensor_fault, ac_quality };
-    points[27] = (iec104_status_point_t){ IEC104_IOA_YX_485_AC_EVAPORATOR_SENSOR_FAULT, ac->run_status.evaporator_sensor_fault, ac_quality };
-    points[28] = (iec104_status_point_t){ IEC104_IOA_YX_485_AC_CONDENSER_SENSOR_FAULT, ac->run_status.condenser_sensor_fault, ac_quality };
-    points[29] = (iec104_status_point_t){ IEC104_IOA_YX_485_AC_HUMIDITY_SENSOR_FAULT, ac->run_status.humidity_sensor_fault, ac_quality };
+    points[19] = (iec104_status_point_t){ IEC104_IOA_YX_485_AC_ONLINE, ac->status.online, ac_quality };
+    points[20] = (iec104_status_point_t){ IEC104_IOA_YX_485_AC_FAULT, iec104_ac_has_fault(ac), ac_quality };
+    points[21] = (iec104_status_point_t){ IEC104_IOA_YX_485_AC_COOLING, ac->run_status.cooling_on, ac_quality };
+    points[22] = (iec104_status_point_t){ IEC104_IOA_YX_485_AC_HEATING, ac->run_status.heater_on, ac_quality };
+    points[23] = (iec104_status_point_t){ IEC104_IOA_YX_485_AC_INNER_FAN, ac->run_status.inner_fan_on, ac_quality };
+    points[24] = (iec104_status_point_t){ IEC104_IOA_YX_485_AC_OUTER_FAN, ac->run_status.outer_fan_on, ac_quality };
+    points[25] = (iec104_status_point_t){ IEC104_IOA_YX_485_AC_HUMIDITY_HIGH, ac->run_status.humidity_high_alarm, ac_quality };
+    points[26] = (iec104_status_point_t){ IEC104_IOA_YX_485_AC_HIGH_TEMP, ac->run_status.high_temp_alarm, ac_quality };
+    points[27] = (iec104_status_point_t){ IEC104_IOA_YX_485_AC_LOW_TEMP, ac->run_status.low_temp_alarm, ac_quality };
+    points[28] = (iec104_status_point_t){ IEC104_IOA_YX_485_AC_CONDENSER_HIGH, ac->run_status.condenser_high_pressure_alarm, ac_quality };
+    points[29] = (iec104_status_point_t){ IEC104_IOA_YX_485_AC_EVAPORATOR_FREEZE, ac->run_status.evaporator_freeze_alarm, ac_quality };
+    points[30] = (iec104_status_point_t){ IEC104_IOA_YX_485_AC_CABINET_SENSOR_FAULT, ac->run_status.cabinet_sensor_fault, ac_quality };
+    points[31] = (iec104_status_point_t){ IEC104_IOA_YX_485_AC_EVAPORATOR_SENSOR_FAULT, ac->run_status.evaporator_sensor_fault, ac_quality };
+    points[32] = (iec104_status_point_t){ IEC104_IOA_YX_485_AC_CONDENSER_SENSOR_FAULT, ac->run_status.condenser_sensor_fault, ac_quality };
+    points[33] = (iec104_status_point_t){ IEC104_IOA_YX_485_AC_HUMIDITY_SENSOR_FAULT, ac->run_status.humidity_sensor_fault, ac_quality };
 }
 
 static void iec104_app_fill_measure_points(const iec104_app_snapshot_t *snapshot, iec104_measure_point_t *points)
@@ -313,6 +334,12 @@ static const iec104_command_desc_t iec104_command_table[] = {
     { IEC104_IOA_YK_DOOR_CLOSE,      module_moto_business_request_door_close },
     { IEC104_IOA_YK_HELIPED_EXTEND,  module_moto_business_request_platform_extend },
     { IEC104_IOA_YK_HELIPED_RETRACT, module_moto_business_request_platform_retract },
+    { IEC104_IOA_YK_INDICATOR_LIGHT_ON,  light_output_set_indicator_on },
+    { IEC104_IOA_YK_INDICATOR_LIGHT_OFF, light_output_set_indicator_off },
+    { IEC104_IOA_YK_INTERIOR_LIGHT_ON,   light_output_set_interior_light_on },
+    { IEC104_IOA_YK_INTERIOR_LIGHT_OFF,  light_output_set_interior_light_off },
+    { IEC104_IOA_YK_DECORATIVE_LIGHT_ON, light_output_set_decorative_light_on },
+    { IEC104_IOA_YK_DECORATIVE_LIGHT_OFF, light_output_set_decorative_light_off },
 };
 
 #define IEC104_COMMAND_TABLE_COUNT \

@@ -1,7 +1,7 @@
 #include "key_event.h"
 
 #include "key.h"
-#include "../MOTO/module_moto_business.h"
+#include "../MOTO/motor_business.h"
 
 static void tf_key_platform_short_event(void)
 {

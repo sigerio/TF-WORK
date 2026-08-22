@@ -62,6 +62,7 @@ typedef struct {
     tf_modbus_reg_value_t reg_type; /**< 寄存器值类型（有符号/无符号）             */
 } tf_modbus_reg_map_t;
 
+/* 校验读寄存器响应，并以主机字节序输出寄存器数组。 */
 modbus_rtu_status_t tf_modbus_parse_u16_regs(const uint8_t *frame,
                                              uint32_t len,
                                              uint8_t slave_addr,
@@ -69,6 +70,7 @@ modbus_rtu_status_t tf_modbus_parse_u16_regs(const uint8_t *frame,
                                              uint16_t reg_capacity,
                                              uint16_t *reg_count);
 
+/* 按映射表校验并写入目标设备数据结构，同时更新其通信状态字段。 */
 modbus_rtu_status_t tf_modbus_parse_ranges(
     const uint8_t *frame,
     uint32_t len,

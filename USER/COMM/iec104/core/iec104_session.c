@@ -43,7 +43,8 @@ typedef struct {
     iec104_session_callbacks_t callbacks;
 } iec104_session_state_t;
 
-static iec104_session_state_t session;
+/* 保留全局符号，便于调试器 Watch 直接查看 APCI 会话窗口和定时状态。 */
+iec104_session_state_t session;
 
 static uint8_t iec104_received_acknowledges(uint16_t receive_sequence)
 {
@@ -66,6 +67,18 @@ static uint8_t iec104_received_acknowledges(uint16_t receive_sequence)
 static void iec104_activity_record(uint32_t now)
 {
     session.link.last_activity_tick = now;
+}
+
+static void iec104_session_reset(uint32_t now)
+{
+    iec104_session_callbacks_t callbacks = session.callbacks;
+
+    memset(&session, 0, sizeof(session));
+    session.callbacks = callbacks;
+    session.link.last_activity_tick = now;
+    session.receive_ack.first_pending_tick = now;
+    session.link.test_frame_tick = now;
+    iec104_txq_init();
 }
 
 static uint8_t iec104_send_i(const uint8_t *asdu, uint8_t asdu_length, uint16_t send_sequence, uint16_t receive_sequence)
@@ -158,29 +171,6 @@ static void iec104_handle_i_frame(const iec104_frame_t *frame, uint32_t now)
     }
 }
 
-static void iec104_discard_queued_i_frames(void)
-{
-    uint8_t removed_count = iec104_txq_remove_i_frames();
-
-    /*
-     * STOPDT 只撤销尚未交给 DMA 的 I 帧。被撤销的帧没有真正发出，因此回退
-     * next_sequence，使恢复数据传输后的首帧继续使用正确的 N(S)。
-     */
-    session.send_window.next_sequence =
-        (uint16_t)((session.send_window.next_sequence +
-                    IEC104_SEQUENCE_LIMIT - removed_count) &
-                   IEC104_SEQUENCE_MASK);
-    if (removed_count <= session.send_window.unacknowledged_count) {
-        session.send_window.unacknowledged_count -= removed_count;
-    } else {
-        session.send_window.unacknowledged_count = 0U;
-    }
-    if (session.send_window.unacknowledged_count == 0U) {
-        session.send_window.first_unacknowledged_sequence =
-            session.send_window.next_sequence;
-    }
-}
-
 static void iec104_handle_u_frame(const iec104_frame_t *frame, uint32_t now)
 {
     switch (frame->u_command) {
@@ -190,11 +180,10 @@ static void iec104_handle_u_frame(const iec104_frame_t *frame, uint32_t now)
         break;
 
     case IEC104_U_STOPDT_ACT:
-        session.link.data_transfer_started = 0U;
         if (session.callbacks.on_data_transfer_stop != NULL) {
             session.callbacks.on_data_transfer_stop();
         }
-        iec104_discard_queued_i_frames();
+        iec104_session_reset(now);
         (void)iec104_send_u(IEC104_U_STOPDT_CON);
         break;
 
@@ -270,8 +259,5 @@ void iec104_session_init(const iec104_session_callbacks_t *callbacks, uint32_t n
     if (callbacks != NULL) {
         session.callbacks = *callbacks;
     }
-    session.link.last_activity_tick = now;
-    session.receive_ack.first_pending_tick = now;
-    session.link.test_frame_tick = now;
-    iec104_txq_init();
+    iec104_session_reset(now);
 }

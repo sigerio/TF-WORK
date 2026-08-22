@@ -7,6 +7,21 @@
 #include "gd32f10x_rcu.h"
 #include "gd32f10x_timer.h"
 
+#define BOARD_USART2_ROLE_DEBUG   0U
+#define BOARD_USART2_ROLE_IEC104  1U
+#define BOARD_USART2_ROLE_CHARGER 2U
+
+/* USART2 的引脚、RXNE 中断和 TX DMA 在运行时只能由一个模块占用。 */
+#ifndef BOARD_USART2_ROLE
+#define BOARD_USART2_ROLE BOARD_USART2_ROLE_IEC104
+#endif
+
+#if (BOARD_USART2_ROLE != BOARD_USART2_ROLE_DEBUG) && \
+    (BOARD_USART2_ROLE != BOARD_USART2_ROLE_IEC104) && \
+    (BOARD_USART2_ROLE != BOARD_USART2_ROLE_CHARGER)
+#error BOARD_USART2_ROLE must select DEBUG, IEC104, or CHARGER
+#endif
+
 /*
  * 巡检机巢 底层 IO 拓扑配置
  *
@@ -69,7 +84,7 @@ typedef enum {
     BOARD_PIN_DOOR_LOCK,         /* PB0 - 门电吸锁 */
     BOARD_PIN_LED_INDICATOR,     /* PC3 - 指示灯 */
     BOARD_PIN_LED_INTERIOR,      /* PC4 - 内部照明 */
-    BOARD_PIN_LED_STRIP_ENABLE,  /* PC5 - 装饰灯带使能 */
+    BOARD_PIN_LED_STRIP_ENABLE,  /* PC5 - 独立装饰灯带 */
     BOARD_PIN_COUNT,
     BOARD_PIN_NONE = -1,
 } board_pin_id_e;

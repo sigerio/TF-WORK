@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include <stdio.h>
 
+#include "tf_debug.h"
 #include "board.h"
 #include "com_link.h"
 #include "gd32f10x_dma.h"
@@ -15,18 +16,14 @@
 /*
  * 调试打印口 — 与指定通信口复用，由宏选择。
  *
- * 由宏 DEBUG_CONSOLE_ENABLE 控制总开关：
- *   1 = 使能，TF_PRINTF/TF_DEBUG 输出经所选串口 TX DMA 发出；
- *   0 = 关闭，所有打印为空操作，不占硬件。
+ * 由 TF_DEBUG_ENABLE 控制总开关：定义时输出经 USART2 TX DMA 发出；
+ * 未定义时所有函数为空操作，不占硬件。
  *
- * 固定使用 USART2（充电板通信口）。
+ * 固定使用 USART2（充电板通信口）。IEC104 开发端口启用时，该口由 IEC104
+ * 独占；默认配置自动关闭打印，显式同时启用两者会触发编译错误。
  */
 
-#ifndef DEBUG_CONSOLE_ENABLE
-#define DEBUG_CONSOLE_ENABLE 1U
-#endif
-
-#if DEBUG_CONSOLE_ENABLE
+#if defined(TF_DEBUG_ENABLE)
 
 /* 上位机命令接收 FIFO（RXNE 中断推入，供调试命令解析读取） */
 #define DEBUG_CONSOLE_RX_FIFO_SIZE 256U
@@ -245,7 +242,7 @@ int tf_debug_printf(const char *format, ...)
     return length;
 }
 
-#else /* DEBUG_CONSOLE_ENABLE == 0 */
+#else /* TF_DEBUG_ENABLE 未定义 */
 
 void debug_console_init(void)
 {
@@ -265,4 +262,4 @@ int tf_debug_printf(const char *format, ...)
     return 0;
 }
 
-#endif /* DEBUG_CONSOLE_ENABLE */
+#endif /* TF_DEBUG_ENABLE */

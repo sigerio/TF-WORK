@@ -226,6 +226,21 @@ uint16_t com_link_rx_read(com_link_t *link, uint8_t *buf, uint16_t len)
     return (uint16_t)read_len;
 }
 
+uint16_t com_link_rx_read_exact(com_link_t *link, uint8_t *buf, uint16_t len)
+{
+    uint32_t read_len;
+
+    if ((link == NULL) || (buf == NULL) || (len == 0U)) {
+        return 0U;
+    }
+
+    __disable_irq();
+    read_len = ringbuf_read_exact(link->res->rx_fifo, buf, len);
+    __enable_irq();
+
+    return (uint16_t)read_len;
+}
+
 uint16_t com_link_rx_peek(com_link_t *link, uint8_t *buf, uint16_t len)
 {
     uint32_t peek_len;

@@ -67,15 +67,19 @@ typedef struct {
 } tf_modbus_txq_diag_t;
 #endif
 
+/* 清空全部待发请求及其响应期望。 */
 void tf_modbus_txq_reset(void);
+/* 复制一帧请求及其期望响应到共享发送队列。 */
 bool tf_modbus_txq_push(const uint8_t *frame,
                         uint16_t frame_len,
                         const tf_modbus_rsp_expect_t *expect);
+/* 仅取出指定总线的最早请求，避免不同总线互相占用发送机会。 */
 bool tf_modbus_txq_pop(tf_modbus_bus_t bus,
                        uint8_t *frame,
                        uint16_t frame_capacity,
                        uint16_t *frame_len,
                        tf_modbus_rsp_expect_t *expect);
+/* 返回全部总线尚未发送的请求条目数。 */
 uint8_t tf_modbus_txq_count(void);
 #if MODULE_MODBUS_ENABLE_DIAG
 void tf_modbus_txq_get_diag(tf_modbus_txq_diag_t *diag);

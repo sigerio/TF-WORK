@@ -34,11 +34,12 @@ typedef enum {
 } modbus_rtu_status_t;
 
 typedef struct {
-    uint8_t address;
-    uint8_t function;
-    uint8_t exception_code;
+    uint8_t address;        /* 返回异常响应的从机地址。 */
+    uint8_t function;       /* 原请求功能码，已去除异常标志位。 */
+    uint8_t exception_code; /* Modbus 异常码。 */
 } modbus_rtu_exception_t;
 
+/* CRC、字节序和请求构帧原语，不管理串口或请求队列。 */
 uint16_t modbus_rtu_crc16(const uint8_t *data, uint32_t len);
 bool modbus_rtu_check_crc(const uint8_t *frame, uint32_t len);
 void modbus_rtu_append_crc(uint8_t *frame, uint32_t len_without_crc);
@@ -52,10 +53,12 @@ uint32_t modbus_rtu_build_write_single_request(uint8_t addr, uint8_t function,
                                                uint16_t reg, uint16_t value,
                                                uint8_t *out, uint32_t out_size);
 
+/* 校验异常响应；匹配时将从机异常写入 exception。 */
 modbus_rtu_status_t modbus_rtu_parse_exception(const uint8_t *frame, uint32_t len,
                                                uint8_t expect_addr,
                                                uint8_t expect_function,
                                                modbus_rtu_exception_t *exception);
+/* 校验读寄存器或读位响应，并解析为调用方提供的数组。 */
 modbus_rtu_status_t modbus_rtu_parse_read_regs_response(const uint8_t *frame,
                                                         uint32_t len,
                                                         uint8_t expect_addr,

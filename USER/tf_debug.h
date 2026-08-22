@@ -32,6 +32,8 @@
 
 #include <stdio.h>
 
+#include "BOARD/board.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -46,6 +48,11 @@ int tf_debug_printf(const char *fmt, ...);
  * 自动添加标签颜色 + __func__。
  * ================================================================*/
 // #define TF_DEBUG_ENABLE
+
+#if defined(TF_DEBUG_ENABLE) && \
+    (BOARD_USART2_ROLE != BOARD_USART2_ROLE_DEBUG)
+#error TF_DEBUG_ENABLE requires BOARD_USART2_ROLE_DEBUG
+#endif
 
 
 /* ==================================================================

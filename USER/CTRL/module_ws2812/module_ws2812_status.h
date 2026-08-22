@@ -6,25 +6,30 @@ extern "C" {
 #endif
 #include <stdint.h>
 
-#define MODULE_WS2812_PERIOD_MS 50
+#define MODULE_WS2812_PERIOD_MS 50U /* 灯效状态机调度周期（ms）。 */
 
-/* 灯带使能脚（PC5，拉低触发）：注释掉则一直使能 */
-#define MODULE_WS2812_STRIP_ENABLE_PIN 1
-
-typedef enum{
+/* 门业务状态对灯效层的简化输入，不表示门的开/关终态。 */
+typedef enum {
     E_DOOR_RUN_IDLE = 0,
     E_DOOR_RUN_IN_ACTION,
-}door_running_in_e;
+} door_running_in_e;
 
-typedef enum{
+/* 平台业务状态对灯效层的简化输入。 */
+typedef enum {
     E_PLATFORM_RUN_IDLE = 0,
     E_PLATFORM_RUN_IN_ACTION,
     E_PLATFORM_NAVIGATE,
-}platform_running_in_e;
+} platform_running_in_e;
 
+/* 更新门/平台状态输入；由用户事件任务在业务状态变化时调用。 */
 void set_door_running_in(door_running_in_e in);
 void set_platform_running_in(platform_running_in_e in);
+
+/* 推进 WS2812 灯效；cycle_ms 必须等于实际调用周期。 */
 void module_ws2812_status_update(uint16_t);
+
+/* 返回当前是否正在输出门或平台相关的 WS2812 动态灯效。 */
+uint8_t module_ws2812_effect_is_active(void);
 
 #ifdef __cplusplus
 }

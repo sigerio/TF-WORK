@@ -23,7 +23,7 @@ void iec104_dispatch_reset(void);
 /* 处理一帧确认后的 ASDU（作为会话回调）。 */
 void iec104_dispatch_handle(const iec104_frame_t *frame, uint32_t now);
 
-/* 变位遥信主动上送，由慢周期轮询任务调用。 */
+/* 变位遥信主动上送组帧，由慢周期报告任务调用。 */
 void iec104_dispatch_send_spontaneous(uint32_t now);
 
 #ifdef __cplusplus

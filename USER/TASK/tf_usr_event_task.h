@@ -13,6 +13,7 @@ extern "C" {
 #define TF_USR_EVENT_TASK_ERR_EVENT            (-1)
 #define TF_USR_EVENT_TASK_ERR_ADDR             (-2)
 
+/* 用户软事件编号：前六项为 RS-485 写请求，其余项为本机按键和运动状态事件。 */
 typedef enum {
     TF_USR_EVENT_485_XM7828_WRITE = 0,
     TF_USR_EVENT_485_XM8189_WRITE,
@@ -25,7 +26,7 @@ typedef enum {
     TF_USR_EVENT_KEY_TRIG,
     TF_USR_EVENT_DOOR_STATE,
     TF_USR_EVENT_PLATFORM_STATE,
-    TF_USR_EVENT_ALL_COUNT,
+    TF_USR_EVENT_ALL_COUNT, /* 事件编号总数，不可用于投递。 */
 } tf_usr_event_id_t;
 
 /**

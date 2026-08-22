@@ -1,9 +1,9 @@
-#include "module_moto_business.h"
+#include "motor_business.h"
 
 #include <stdbool.h>
 #include <stdint.h>
 
-#include "module_moto_sync.h"
+#include "motor_motion.h"
 
 /*
  * 门与停机坪共用一套单轴状态机，差异仅由 axis_ctx_t 数据描述。
