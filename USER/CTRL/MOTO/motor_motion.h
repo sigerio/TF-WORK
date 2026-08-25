@@ -78,13 +78,13 @@ void module_moto_sync_stop_platform(void);
 
 /**
  * @brief  请求双门打开。
- * @note   FORWARD 方向 / 目标位置 MODULE_MOTO_POS_FORWARD（开到位限位）。
+ * @note   BACKWARD 方向 / 目标位置 MODULE_MOTO_POS_BACKWARD（开到位限位）。
  */
 void module_moto_sync_request_door_open(void);
 
 /**
  * @brief  请求双门关闭。
- * @note   BACKWARD 方向 / 目标位置 MODULE_MOTO_POS_BACKWARD（关到位限位）。
+ * @note   FORWARD 方向 / 目标位置 MODULE_MOTO_POS_FORWARD（关到位限位）。
  */
 void module_moto_sync_request_door_close(void);
 

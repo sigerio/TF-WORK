@@ -13,7 +13,7 @@
 
 /* USART2 的引脚、RXNE 中断和 TX DMA 在运行时只能由一个模块占用。 */
 #ifndef BOARD_USART2_ROLE
-#define BOARD_USART2_ROLE BOARD_USART2_ROLE_IEC104
+#define BOARD_USART2_ROLE BOARD_USART2_ROLE_DEBUG
 #endif
 
 #if (BOARD_USART2_ROLE != BOARD_USART2_ROLE_DEBUG) && \
@@ -32,8 +32,9 @@
  *   PA15(空调485方向) PB3(无刷485方向)
  *
  * 说明:
- *   - 装饰灯带 PA7 = SPI0_MOSI(默认映射, 无需 remap), 仅做 WS2812 数据输出。
- *     PB13 按文档作为平台收回限位 GPIO 输入, 不用作 SPI 时钟。
+ *   - 装饰灯带使用 SPI0 默认映射：PA5=SCK、PA7=MOSI。
+ *     PA5 与平台收回到位检测分时复用：WS2812 DMA 发送期间为 SPI0_SCK，
+ *     发送完成后恢复为平台检测输入；PB3 始终为 UART4 485 方向控制。
  */
 
 typedef enum {
@@ -48,8 +49,9 @@ typedef enum {
     BOARD_PIN_USART3_RX,       /* PC11 - 空调485 */
     BOARD_PIN_UART4_TX,        /* PC12 - 无刷电机485 */
     BOARD_PIN_UART4_RX,        /* PD2  - 无刷电机485 */
-    /* ---- 灯带 SPI0 (仅 MOSI 数据脚) ---- */
-    BOARD_PIN_SPI0_MOSI,       /* PA7  - 装饰灯带数据 800k */
+    /* ---- 灯带 SPI0 ---- */
+    BOARD_PIN_SPI0_SCK,        /* PA5  - SPI0 时钟，与平台收回反馈分时复用 */
+    BOARD_PIN_SPI0_MOSI,       /* PA7  - SPI0 数据，接 WS2812 */
     /* ---- 485 方向控制 (拉高发送/拉低接收, 默认拉低) ---- */
     BOARD_PIN_RS485_WEATHER_DIR,   /* PA8  - 气象板 */
     BOARD_PIN_RS485_AC_DIR,        /* PA15 - 空调 */
@@ -99,7 +101,7 @@ typedef enum {
 } board_usart_id_e;
 
 typedef enum {
-    BOARD_SPI_WS2812 = 0, /* SPI0 - 装饰灯带 (仅 MOSI=PA7) */
+    BOARD_SPI_WS2812 = 0, /* SPI0 默认映射 - 装饰灯带（SCK=PA5，MOSI=PA7） */
     BOARD_SPI_COUNT,
 } board_spi_id_e;
 
@@ -183,6 +185,7 @@ typedef struct {
 typedef struct {
     uint32_t peripheral;
     rcu_periph_enum clock;
+    board_pin_id_e sck_pin;                 /* SCK IO */
     board_pin_id_e mosi_pin;                /* MOSI IO */
     board_dma_ref_t tx_dma;                 /* TX DMA */
     uint32_t prescale;

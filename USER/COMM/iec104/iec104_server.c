@@ -1,8 +1,10 @@
 #include "iec104_server.h"
 
 #include <stddef.h>
+#include <stdio.h>
 
 #include "../../OS/tf_os.h"
+#include "../../tf_debug.h"
 #include "app/iec104_dispatch.h"
 #include "core/iec104_apci.h"
 #include "core/iec104_session.h"
@@ -20,6 +22,40 @@
  */
 
 static uint8_t receive_apdu[IEC104_MAX_FRAME_LENGTH];
+
+static void iec104_log_frame(const char *direction,
+                             const uint8_t *frame,
+                             uint16_t length)
+{
+    if(0 == debug_ctrl.bits.iec)    return;
+    
+    char line[128];
+    uint16_t offset = 0U;
+
+    if ((direction == NULL) || (frame == NULL) || (length == 0U)) {
+        return;
+    }
+
+    /* 分段打印，避免长 APDU 超过调试串口格式化缓冲区。 */
+    while (offset < length) {
+        int used = snprintf(line, sizeof(line),
+                            "IEC104 %s len=%u:", direction,
+                            (unsigned)length);
+        uint16_t count = 0U;
+
+        if (used < 0) {
+            return;
+        }
+        while ((count < 24U) && (offset < length) &&
+               ((uint32_t)used + 4U < sizeof(line))) {
+            used += snprintf(&line[used], sizeof(line) - (size_t)used,
+                             " %02X", frame[offset++]);
+            count++;
+        }
+        (void)snprintf(&line[used], sizeof(line) - (size_t)used, "\n");
+        TF_DEBUG("APP", "%s", line);
+    }
+}
 
 static uint8_t iec104_server_receive_frame(iec104_frame_t *frame)
 {
@@ -51,6 +87,8 @@ static uint8_t iec104_server_receive_frame(iec104_frame_t *frame)
         if (!iec104_port_rx_read(receive_apdu, apdu_length)) {
             return 0U;
         }
+
+        iec104_log_frame("RX", receive_apdu, apdu_length);
 
         if (iec104_decode(receive_apdu, apdu_length, frame)) {
             return 1U;
@@ -88,6 +126,7 @@ static void iec104_send_queued_apdu(void)
         return;
     }
 
+    iec104_log_frame("TX", apdu, apdu_length);
     (void)iec104_port_tx_start(apdu_length);
 }
 

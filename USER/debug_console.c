@@ -1,8 +1,10 @@
 #include "debug_console.h"
 
 #include <stdarg.h>
+#include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <string.h>
 
 #include "tf_debug.h"
 #include "board.h"
@@ -25,14 +27,19 @@
 
 #if defined(TF_DEBUG_ENABLE)
 
+debug_ctrl_u debug_ctrl = {0};
 /* 上位机命令接收 FIFO（RXNE 中断推入，供调试命令解析读取） */
-#define DEBUG_CONSOLE_RX_FIFO_SIZE 256U
+#define DEBUG_CONSOLE_RX_FIFO_SIZE (256U)
 static uint8_t s_rx_fifo_buf[DEBUG_CONSOLE_RX_FIFO_SIZE];
 static ringbuf_t s_rx_fifo;
 
+#define DEBUG_CONSOLE_COMMAND_SIZE  (16U)
+static char s_command[DEBUG_CONSOLE_COMMAND_SIZE];
+static uint8_t s_command_length;
+
 /* TX 双缓冲（ping-pong）：一块在 DMA 发送，另一块继续写入，提升吞吐 */
 #define DEBUG_CONSOLE_BUFFER_COUNT 2U
-#define DEBUG_CONSOLE_BUFFER_SIZE 512U
+#define DEBUG_CONSOLE_BUFFER_SIZE 2048U
 #define DEBUG_CONSOLE_IDLE_BUFFER 0xFFU
 static volatile uint8_t active_buffer = DEBUG_CONSOLE_IDLE_BUFFER;
 static uint8_t buffers[DEBUG_CONSOLE_BUFFER_COUNT][DEBUG_CONSOLE_BUFFER_SIZE];
@@ -240,6 +247,103 @@ int tf_debug_printf(const char *format, ...)
     }
 
     return length;
+}
+
+static bool debug_console_parse_value(const char *text,
+                                      uint8_t max_value,
+                                      uint8_t *value)
+{
+    uint16_t parsed = 0U;
+    bool has_digit = false;
+
+    if ((text == NULL) || (value == NULL)) {
+        return false;
+    }
+
+    while ((*text >= '0') && (*text <= '9')) {
+        has_digit = true;
+        parsed = (uint16_t)(parsed * 10U + (uint16_t)(*text - '0'));
+        if (parsed > max_value) {
+            return false;
+        }
+        text++;
+    }
+
+    if (!has_digit || (*text != '\0')) {
+        return false;
+    }
+
+    *value = (uint8_t)parsed;
+    return true;
+}
+
+static bool debug_console_apply_command(const char *command)
+{
+    const char *value_text;
+    uint8_t value;
+
+    if (command == NULL) {
+        return false;
+    }
+
+    if (strncmp(command, "AC:", 3U) == 0) {
+        value_text = &command[3];
+        if (!debug_console_parse_value(value_text, 1U, &value)) {
+            return false;
+        }
+        debug_ctrl.bits.ac = value;
+    } else if (strncmp(command, "IEC:", 4U) == 0) {
+        value_text = &command[4];
+        if (!debug_console_parse_value(value_text, 1U, &value)) {
+            return false;
+        }
+        debug_ctrl.bits.iec = value;
+    } else if (strncmp(command, "WETH:", 5U) == 0) {
+        value_text = &command[5];
+        if (!debug_console_parse_value(value_text, 1U, &value)) {
+            return false;
+        }
+        debug_ctrl.bits.weth = value;
+    } else if (strncmp(command, "WSE:", 4U) == 0) {
+        value_text = &command[4];
+        if (!debug_console_parse_value(value_text, 2U, &value)) {
+            return false;
+        }
+        debug_ctrl.bits.wse = value;
+    } else {
+        return false;
+    }
+
+    return true;
+}
+
+void debug_console_task(void)
+{
+    uint8_t byte;
+
+    while (ringbuf_available(&s_rx_fifo) > 0U) {
+        __disable_irq();
+        if (ringbuf_read_exact(&s_rx_fifo, &byte, 1U) != 1U) {
+            __enable_irq();
+            return;
+        }
+        __enable_irq();
+
+        if ((byte == '\r') || (byte == '\n')) {
+            if (s_command_length > 0U) {
+                s_command[s_command_length] = '\0';
+                (void)debug_console_apply_command(s_command);
+                s_command_length = 0U;
+            }
+            continue;
+        }
+
+        if (s_command_length < (DEBUG_CONSOLE_COMMAND_SIZE - 1U)) {
+            s_command[s_command_length++] = (char)byte;
+        } else {
+            s_command_length = 0U;
+        }
+    }
 }
 
 #else /* TF_DEBUG_ENABLE 未定义 */

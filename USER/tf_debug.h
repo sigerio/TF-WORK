@@ -47,8 +47,9 @@ int tf_debug_printf(const char *fmt, ...);
  * 用于调试追踪，定义宏时输出，未定义时编译为空。
  * 自动添加标签颜色 + __func__。
  * ================================================================*/
-// #define TF_DEBUG_ENABLE
-
+#if (BOARD_USART2_ROLE == BOARD_USART2_ROLE_DEBUG)
+#define TF_DEBUG_ENABLE
+#endif
 #if defined(TF_DEBUG_ENABLE) && \
     (BOARD_USART2_ROLE != BOARD_USART2_ROLE_DEBUG)
 #error TF_DEBUG_ENABLE requires BOARD_USART2_ROLE_DEBUG
@@ -59,6 +60,22 @@ int tf_debug_printf(const char *fmt, ...);
 
  * ================================================================*/
 #ifdef TF_DEBUG_ENABLE
+
+typedef union 
+{
+    struct 
+    {
+        uint8_t ac: 1;
+        uint8_t weth: 1;
+        uint8_t iec: 1;
+        uint8_t wse: 2;
+    }bits;
+    uint8_t byte;
+    
+}debug_ctrl_u;
+extern debug_ctrl_u debug_ctrl;
+
+
 #define TF_PRINTF(fmt, ...) \
     tf_debug_printf(fmt, ##__VA_ARGS__)
 #else
@@ -111,6 +128,11 @@ static inline const char* tf_tag_color(const char *tag)
 #else
     #define TF_DEBUG(tag, fmt, ...)  ((void)0)
 #endif /* TF_DEBUG_ENABLE */
+
+
+
+
+
 
 #ifdef __cplusplus
 }

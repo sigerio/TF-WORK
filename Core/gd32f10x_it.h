@@ -67,4 +67,5 @@ void UART3_IRQHandler(void);
 /* DMA0 channel5 handle function */
 void DMA0_Channel5_IRQHandler(void);
 void DMA0_Channel1_IRQHandler(void);
+void DMA0_Channel2_IRQHandler(void);
 #endif /* GD32F10X_IT_H */

@@ -33,12 +33,29 @@ static const module_ws2812_config_t ws2812_configs[MODULE_WS2812_ID_COUNT] = {
 
 static module_ws2812_device_t ws2812_devices[MODULE_WS2812_ID_COUNT];
 
+static void module_ws2812_sck_spi_mode(const board_spi_config_t *spi)
+{
+    const board_gpio_config_t *sck = &board_gpio_configs[spi->sck_pin];
+
+    gpio_init(sck->port, GPIO_MODE_AF_PP, sck->speed, sck->pin);
+}
+
+static void module_ws2812_sck_platform_input_mode(const board_spi_config_t *spi)
+{
+    const board_gpio_config_t *sck = &board_gpio_configs[spi->sck_pin];
+
+    gpio_init(sck->port, GPIO_MODE_IPU, sck->speed, sck->pin);
+}
+
 static void module_ws2812_hardware_init(void)
 {
     dma_parameter_struct dma_parameters;
 
     rcu_periph_clock_enable(RCU_GPIOA);
     rcu_periph_clock_enable(RCU_DMA0);
+    rcu_periph_clock_enable(RCU_AF);
+    /* PA5/PA7 使用 SPI0 默认映射；PB3 仍由 UART4 485 方向控制使用。 */
+    gpio_pin_remap_config(GPIO_SPI0_REMAP, DISABLE);
 
     dma_struct_para_init(&dma_parameters);
     dma_parameters.memory_addr = 0U;
@@ -57,6 +74,8 @@ static void module_ws2812_hardware_init(void)
         const board_dma_channel_config_t *dma = &dma_ctl->ch[spi->tx_dma.ch];
         spi_parameter_struct spi_parameters;
 
+        /* WS2812 不接外部 SCK，但 SPI 内部移位仍要求 SCK 复用有效。 */
+        module_ws2812_sck_spi_mode(spi);
         gpio_init(mosi_pin->port, mosi_pin->mode, mosi_pin->speed, mosi_pin->pin);
         gpio_bit_write(mosi_pin->port, mosi_pin->pin, mosi_pin->initial_level ? SET : RESET);
 
@@ -81,6 +100,9 @@ static void module_ws2812_hardware_init(void)
         dma_memory_to_memory_disable(dma_ctl->controller, dma->channel);
         dma_flag_clear(dma_ctl->controller, dma->channel,
                        DMA_FLAG_G | DMA_FLAG_FTF | DMA_FLAG_HTF | DMA_FLAG_ERR);
+        dma_interrupt_enable(dma_ctl->controller, dma->channel, DMA_INT_FTF);
+        nvic_irq_enable(DMA0_Channel2_IRQn, 1U, 3U);
+        module_ws2812_sck_platform_input_mode(spi);
     }
 }
 
@@ -139,6 +161,9 @@ void ws2812_frame_set_rgb(uint8_t *encoded_frame, uint32_t led_index,
 void module_ws2812_init(void)
 {
     module_ws2812_hardware_init();
+
+    /* 工作帧已经是 SPI 编码帧，逻辑 0 必须编码为 0xC0，不能填 0x00。 */
+    memset(ws2812_work_frame, WS2812_CODE_0, sizeof(ws2812_work_frame));
 
     for (int strip_index = 0; strip_index < MODULE_WS2812_ID_COUNT; strip_index++) {
         const module_ws2812_config_t *config = &ws2812_configs[strip_index];
@@ -206,7 +231,8 @@ void module_ws2812_set_rgb_range(module_ws2812_id_e strip_id,
 
 void module_ws2812_clear_work_frame(void)
 {
-    memset(ws2812_work_frame, 0, sizeof(ws2812_work_frame));
+    /* 编码后的逻辑 0 为 0xC0，填 0x00 会让 MOSI 长时间保持低电平。 */
+    memset(ws2812_work_frame, WS2812_CODE_0, sizeof(ws2812_work_frame));
 }
 
 void module_ws2812_copy_work_frame_to_dma(module_ws2812_id_e strip_id)
@@ -272,14 +298,42 @@ void module_ws2812_send_frame_dma(module_ws2812_id_e strip_id)
     }
 
     dma_tx_buffer_length = module_ws2812_prepare_dma_tx_buffer(config);
+    module_ws2812_sck_spi_mode(spi);
     dma_channel_disable(dma_ctl->controller, dma->channel);
     dma_periph_address_config(dma_ctl->controller, dma->channel, dma->peripheral_address);
     dma_memory_address_config(dma_ctl->controller, dma->channel,
                               (uint32_t)config->dma_tx_buffer);
     dma_transfer_number_config(dma_ctl->controller, dma->channel, dma_tx_buffer_length);
-    dma_flag_clear(dma_ctl->controller, dma->channel, DMA_FLAG_G);
+    /* FTF/HTF/ERR 不会因重新装载计数器自动清除，启动前必须全部清掉。 */
+    dma_flag_clear(dma_ctl->controller, dma->channel,
+                   DMA_FLAG_G | DMA_FLAG_FTF | DMA_FLAG_HTF | DMA_FLAG_ERR);
+    /* 防止其他代码关闭 SPI DMA 请求，发送前显式恢复 TX DMA。 */
+    spi_dma_enable(spi->peripheral, SPI_DMA_TRANSMIT);
     dma_channel_enable(dma_ctl->controller, dma->channel);
     device->transfer_started = true;
+}
+
+void module_ws2812_dma_irq(void)
+{
+    const module_ws2812_config_t *config = &ws2812_configs[MODULE_WS2812_STRIP_0];
+    module_ws2812_device_t *device = &ws2812_devices[MODULE_WS2812_STRIP_0];
+    const board_spi_config_t *spi = &board_spi_configs[config->spi];
+    const board_dma_config_t *dma_ctl = &board_dma_configs[spi->tx_dma.dma];
+    const board_dma_channel_config_t *dma = &dma_ctl->ch[spi->tx_dma.ch];
+
+    if (!device->transfer_started ||
+        dma_flag_get(dma_ctl->controller, dma->channel, DMA_FLAG_FTF) == RESET) {
+        return;
+    }
+
+    while (spi_i2s_flag_get(spi->peripheral, SPI_FLAG_TRANS) == SET) {
+    }
+    spi_dma_disable(spi->peripheral, SPI_DMA_TRANSMIT);
+    dma_channel_disable(dma_ctl->controller, dma->channel);
+    dma_flag_clear(dma_ctl->controller, dma->channel,
+                   DMA_FLAG_G | DMA_FLAG_FTF | DMA_FLAG_HTF | DMA_FLAG_ERR);
+    module_ws2812_sck_platform_input_mode(spi);
+    device->transfer_started = false;
 }
 
 uint32_t get_strip_led_count(module_ws2812_id_e strip_id)

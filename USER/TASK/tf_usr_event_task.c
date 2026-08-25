@@ -27,15 +27,9 @@ static void tf_usr_485_xm7828_write_cb(void *arg)
         return;
     }
 
-    if (!tf_modbus_xm7828_write(write_arg->slave_addr,
-                             write_arg->ref,
-                             write_arg->value)) {
-        TF_DEBUG("EVENT",
-                 "xm7828 write enqueue failed slave=%u ref=0x%04X value=0x%04X\n",
-                 (unsigned)write_arg->slave_addr,
-                 (unsigned)write_arg->ref,
-                 (unsigned)write_arg->value);
-    }
+    (void)tf_modbus_xm7828_write(write_arg->slave_addr,
+                                 write_arg->ref,
+                                 write_arg->value);
 }
 
 static void tf_usr_485_xm8189_write_cb(void *arg)
@@ -47,15 +41,9 @@ static void tf_usr_485_xm8189_write_cb(void *arg)
         return;
     }
 
-    if (!tf_modbus_xm8189_write(write_arg->slave_addr,
-                             write_arg->ref,
-                             write_arg->value)) {
-        TF_DEBUG("EVENT",
-                 "xm8189 write enqueue failed slave=%u ref=0x%04X value=0x%04X\n",
-                 (unsigned)write_arg->slave_addr,
-                 (unsigned)write_arg->ref,
-                 (unsigned)write_arg->value);
-    }
+    (void)tf_modbus_xm8189_write(write_arg->slave_addr,
+                                 write_arg->ref,
+                                 write_arg->value);
 }
 
 static void tf_usr_485_xm8537_write_cb(void *arg)
@@ -67,15 +55,9 @@ static void tf_usr_485_xm8537_write_cb(void *arg)
         return;
     }
 
-    if (!tf_modbus_xm8537_write(write_arg->slave_addr,
-                             write_arg->ref,
-                             write_arg->value)) {
-        TF_DEBUG("EVENT",
-                 "xm8537 write enqueue failed slave=%u ref=0x%04X value=0x%04X\n",
-                 (unsigned)write_arg->slave_addr,
-                 (unsigned)write_arg->ref,
-                 (unsigned)write_arg->value);
-    }
+    (void)tf_modbus_xm8537_write(write_arg->slave_addr,
+                                 write_arg->ref,
+                                 write_arg->value);
 }
 
 static void tf_usr_485_xm9505_write_cb(void *arg)
@@ -87,15 +69,9 @@ static void tf_usr_485_xm9505_write_cb(void *arg)
         return;
     }
 
-    if (!tf_modbus_xm9505_write(write_arg->slave_addr,
-                             write_arg->ref,
-                             write_arg->value)) {
-        TF_DEBUG("EVENT",
-                 "xm9505 write enqueue failed slave=%u ref=0x%04X value=0x%04X\n",
-                 (unsigned)write_arg->slave_addr,
-                 (unsigned)write_arg->ref,
-                 (unsigned)write_arg->value);
-    }
+    (void)tf_modbus_xm9505_write(write_arg->slave_addr,
+                                 write_arg->ref,
+                                 write_arg->value);
 }
 
 static void tf_usr_485_ac_status_write_cb(void *arg)

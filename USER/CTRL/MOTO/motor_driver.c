@@ -53,11 +53,11 @@ static const module_moto_hw_config_t motor_hw_configs[MODULE_MOTO_ID_COUNT] = {
         BOARD_PIN_PLATFORM_EXTEND_SIGNAL, BOARD_PIN_PLATFORM_RETRACT_SIGNAL,
     },
     [DOOR1_MOTOR_ID] = {
-        BOARD_PWM_DOOR, BOARD_PWM_CH0, BOARD_PWM_CH1,
+        BOARD_PWM_DOOR, BOARD_PWM_CH1, BOARD_PWM_CH0,
         BOARD_PIN_DOOR1_EXTEND_SIGNAL, BOARD_PIN_DOOR1_RETRACT_SIGNAL,
     },
     [DOOR2_MOTOR_ID] = {
-        BOARD_PWM_DOOR, BOARD_PWM_CH2, BOARD_PWM_CH3,
+        BOARD_PWM_DOOR, BOARD_PWM_CH3, BOARD_PWM_CH2,
         BOARD_PIN_DOOR2_EXTEND_SIGNAL, BOARD_PIN_DOOR2_RETRACT_SIGNAL,
     },
 };
@@ -91,11 +91,9 @@ static bool module_moto_is_ready(module_moto_id_e motor_id)
 /* 读低触发：读到低电平 = 到位 */
 static uint8_t module_moto_read_feedback(board_pin_id_e pin_id)
 {
-    FlagStatus level = gpio_input_bit_get(BOARD_PIN_PORT(pin_id),
-                                          BOARD_PIN_PIN(pin_id));
+    FlagStatus level = gpio_input_bit_get(BOARD_PIN_PORT(pin_id), BOARD_PIN_PIN(pin_id));
 
-    return ((level == SET) ? 1U : 0U) ==
-           (MODULE_MOTO_FB_ACTIVE_LEVEL) ? 1U : 0U;
+    return ((level == SET) ? 1U : 0U) == (MODULE_MOTO_FB_ACTIVE_LEVEL) ? 1U : 0U;
 }
 
 /* 三台推杆的到位反馈，均为读低有效。 */

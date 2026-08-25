@@ -11,8 +11,6 @@ void debug_console_tx_dma_irq(void);
 /* 格式化并提交调试文本，返回 vsnprintf 结果；调试功能关闭时返回 0。 */
 int tf_debug_printf(const char *format, ...);
 
-/* 上位机命令接收（RXNE 中断推入 FIFO，供调试命令解析读取） */
-uint16_t debug_console_rx_available(void);
-uint16_t debug_console_rx_read(uint8_t *buf, uint16_t len);
+void debug_console_task(void);
 
 #endif /* DEBUG_CONSOLE_H */

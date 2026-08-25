@@ -36,6 +36,7 @@ OF SUCH DAMAGE.
 #include "../USER/debug_console.h"
 #include "../USER/COMM/iec104/port/iec104_port.h"
 #include "../USER/COMM/modbus/tf_modbus_master.h"
+#include "../USER/CTRL/module_ws2812/module_ws2812.h"
 
 extern void tf_delay_systick_irq_handler(void);
 
@@ -182,6 +183,11 @@ void DMA0_Channel1_IRQHandler(void)
 #if (BOARD_USART2_ROLE == BOARD_USART2_ROLE_DEBUG)
     debug_console_tx_dma_irq();
 #endif
+}
+
+void DMA0_Channel2_IRQHandler(void)
+{
+    module_ws2812_dma_irq();
 }
 
 void DMA0_Channel5_IRQHandler(void)

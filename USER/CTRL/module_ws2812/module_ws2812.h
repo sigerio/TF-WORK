@@ -6,7 +6,7 @@
 #include "board.h"
 
 
-#define MODULE_WS2812_STRIP0_LED_COUNT  18U
+#define MODULE_WS2812_STRIP0_LED_COUNT  12U
 #define WS2812_ENCODED_BYTES_PER_LED  24U
 
 #ifdef __cplusplus
@@ -76,6 +76,9 @@ void module_ws2812_send_frame(module_ws2812_id_e strip_id);
  * 本次发送会被直接丢弃。
  */
 void module_ws2812_send_frame_dma(module_ws2812_id_e strip_id);
+
+/* DMA0_CH2 完成中断入口：等待 SPI 移位结束并释放 PA5。 */
+void module_ws2812_dma_irq(void);
 
 
 

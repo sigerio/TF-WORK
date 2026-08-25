@@ -151,11 +151,11 @@ static void refresh_door_run_status(void)
     {
         run_status.door = MODULE_MOTO_DOOR_STATE_FAULT;
     }
-    else if (door_at_target(MODULE_MOTO_POS_FORWARD))
+    else if (door_at_target(MODULE_MOTO_POS_BACKWARD))
     {
         run_status.door = MODULE_MOTO_DOOR_STATE_OPENED;
     }
-    else if (door_at_target(MODULE_MOTO_POS_BACKWARD))
+    else if (door_at_target(MODULE_MOTO_POS_FORWARD))
     {
         run_status.door = MODULE_MOTO_DOOR_STATE_CLOSED;
     }
@@ -477,8 +477,8 @@ void module_moto_sync_request_door_open(void)
 {
     module_moto_door_unlock();
     set_door_motion_phase(MOTION_START);
-    door_motion.direction = MODULE_MOTO_DIR_FORWARD;
-    door_motion.target_position = MODULE_MOTO_POS_FORWARD;
+    door_motion.direction = MODULE_MOTO_DIR_BACKWARD;
+    door_motion.target_position = MODULE_MOTO_POS_BACKWARD;
     door_motion.motion_error = MOTION_ERROR_NONE;
     door_motion.start_err_cnt = 0U;
     trigger_door_state_event(E_DOOR_RUN_IN_ACTION);
@@ -487,8 +487,8 @@ void module_moto_sync_request_door_open(void)
 void module_moto_sync_request_door_close(void)
 {
     set_door_motion_phase(MOTION_START);
-    door_motion.direction = MODULE_MOTO_DIR_BACKWARD;
-    door_motion.target_position = MODULE_MOTO_POS_BACKWARD;
+    door_motion.direction = MODULE_MOTO_DIR_FORWARD;
+    door_motion.target_position = MODULE_MOTO_POS_FORWARD;
     door_motion.motion_error = MOTION_ERROR_NONE;
     door_motion.start_err_cnt = 0U;
     trigger_door_state_event(E_DOOR_RUN_IN_ACTION);

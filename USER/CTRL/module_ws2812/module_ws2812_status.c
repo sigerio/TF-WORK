@@ -2,6 +2,7 @@
 
 #include <stdbool.h>
 
+#include "../../tf_debug.h"
 #include "module_ws2812_effect.h"
 
 /* SPI0/PA7 的 WS2812 灯效按机库业务状态驱动。 */
@@ -59,6 +60,24 @@ void module_ws2812_status_update(uint16_t cyctime)
     bool any_effect = false;
 
     module_ws2812_clear_work_frame();
+
+#ifdef TF_DEBUG_ENABLE
+    /* WSE 非 0 时由调试命令覆盖业务状态：1=全红，2=全绿。 */
+    if (debug_ctrl.bits.wse != 0U) {
+        uint32_t color = (debug_ctrl.bits.wse == 1U) ?
+            WS2812_RGB(255U, 0U, 0U) : WS2812_RGB(0U, 255U, 0U);
+
+        module_ws2812_effect_at(MODULE_WS2812_STRIP_0,
+                                 0U,
+                                 get_strip_led_count(MODULE_WS2812_STRIP_0) - 1U,
+                                 color,
+                                 100U);
+        ws2812_effect_active = 1U;
+        module_ws2812_copy_work_frame_to_dma(MODULE_WS2812_STRIP_0);
+        module_ws2812_send_frame_dma(MODULE_WS2812_STRIP_0);
+        return;
+    }
+#endif
 
     switch (door_running) {
     case E_DOOR_RUN_IN_ACTION:

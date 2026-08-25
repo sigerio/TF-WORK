@@ -8,6 +8,7 @@
 #include "../COMM/modbus/tf_modbus_master.h"
 #include "../CTRL/module_ws2812/module_ws2812_status.h"
 #include "tf_usr_event_task.h"
+#include "debug_console.h"
 
 #define TF_KEY_SCAN_PERIOD_MS 50U
 
@@ -30,13 +31,13 @@ static void tf_modbus_query_timer_task(void *arg)
 static void iec104_server_comm_timer_task(void *arg)
 {
     (void)arg;
-    iec104_server_comm_task();
+    iec104_server_comm_task(); //解帧，ack，以及发送
 }
 
 static void iec104_server_report_timer_task(void *arg)
 {
     (void)arg;
-    iec104_server_report_task();
+    iec104_server_report_task(); //变位上传
 }
 
 static void tf_key_scan_timer_task(void *arg)
@@ -84,6 +85,12 @@ static void module_ws2812_run_timer_task(void *arg)
     module_ws2812_status_update(*cyctime);
 }
 
+static void debug_console_timer_task(void *arg)
+{
+    (void)arg;
+    debug_console_task();
+}
+
 void tf_usr_time_task_init(void)
 {
     tf_os_soft_timer_task(tf_modbus_master_timer_task,
@@ -114,4 +121,8 @@ void tf_usr_time_task_init(void)
                           (void*)&tf_ws2812_period_ms,
                           MODULE_WS2812_PERIOD_MS,
                           30U);
+    tf_os_soft_timer_task(debug_console_timer_task,
+                          0,
+                          10U,
+                          5U);
 }

@@ -33,7 +33,8 @@ const board_gpio_config_t board_gpio_configs[BOARD_PIN_COUNT] = {
     [BOARD_PIN_USART3_RX] = { GPIOC, GPIO_PIN_11, GPIO_MODE_IN_FLOATING, GPIO_OSPEED_50MHZ, 0U },
     [BOARD_PIN_UART4_TX]  = { GPIOC, GPIO_PIN_12, GPIO_MODE_AF_PP,       GPIO_OSPEED_50MHZ, 0U },
     [BOARD_PIN_UART4_RX]  = { GPIOD, GPIO_PIN_2,  GPIO_MODE_IN_FLOATING, GPIO_OSPEED_50MHZ, 0U },
-    /* ---- 灯带 ---- */
+    /* ---- 灯带 SPI0 默认映射：PA5=SCK、PA7=MOSI ---- */
+    [BOARD_PIN_SPI0_SCK]  = { GPIOA, GPIO_PIN_5,  GPIO_MODE_AF_PP,       GPIO_OSPEED_50MHZ, 0U },
     [BOARD_PIN_SPI0_MOSI] = { GPIOA, GPIO_PIN_7,  GPIO_MODE_AF_PP,       GPIO_OSPEED_50MHZ, 0U },
     /* ---- 485 方向 (高=发送, 默认低=接收) ---- */
     [BOARD_PIN_RS485_WEATHER_DIR]   = { GPIOA, GPIO_PIN_8,  GPIO_MODE_OUT_PP, GPIO_OSPEED_50MHZ, 0U },
@@ -129,9 +130,15 @@ const board_dma_config_t board_dma_configs[BOARD_DMA_COUNT] = {
 };
 
 const board_spi_config_t board_spi_configs[BOARD_SPI_COUNT] = {
-    /* 108MHz(APB2) / 128 = 0.84MHz, 适配 WS2812 800k */
-    [BOARD_SPI_WS2812] = { SPI0, RCU_SPI0, BOARD_PIN_SPI0_MOSI,
-        { BOARD_DMA_0, BOARD_DMA_CH2 }, SPI_PSC_128 },
+    /* 108MHz(APB2) / 16 = 6.75MHz，8 个 SPI 位编码 1 个 WS2812 位，约 844kHz */
+    [BOARD_SPI_WS2812] = {
+        .peripheral = SPI0,
+        .clock = RCU_SPI0,
+        .sck_pin = BOARD_PIN_SPI0_SCK,
+        .mosi_pin = BOARD_PIN_SPI0_MOSI,
+        .tx_dma = { BOARD_DMA_0, BOARD_DMA_CH2 },
+        .prescale = SPI_PSC_16,
+    },
 };
 
 /* 108MHz/(107+1)=1MHz 计数, period=999 -> 1kHz PWM, 默认99%高电平

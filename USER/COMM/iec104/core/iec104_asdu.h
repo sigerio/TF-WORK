@@ -36,11 +36,13 @@ extern "C" {
 
 #define IEC104_ASDU_HEADER_LENGTH 6U
 
-/* 信息体字节序读写（IEC104 采用小端） */
-uint16_t iec104_asdu_u16_read(const uint8_t *data);
+/* 读取/写入 3 字节无符号 IOA；IOA 按低字节在前编码。 */
 uint32_t iec104_asdu_ioa_read(const uint8_t *data);
-void iec104_asdu_u16_write(uint8_t *data, uint16_t value);
 void iec104_asdu_ioa_write(uint8_t *data, uint32_t value);
+
+/* 读取/写入 2 字节无符号字段（IEC104 采用小端）。 */
+uint16_t iec104_asdu_u16_read(const uint8_t *data);
+void iec104_asdu_u16_write(uint8_t *data, uint16_t value);
 
 /*
  * 组装完整 ASDU（6 字节数据单元标识符 + 信息体）到 out。

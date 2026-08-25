@@ -5,28 +5,29 @@
 
 #include "../core/iec104_asdu.h"
 #include "../core/iec104_session.h"
+#include "../../../tf_debug.h"
 #include "iec104_app.h"
 
 #define IEC104_COMMON_ADDRESS 0x0001U
 
 /* 单点遥控采用“选择后执行”，此处保存最近一次已确认选择。 */
 typedef struct {
-    uint32_t ioa;
-    uint8_t value;
-    uint8_t selected;
+    uint32_t ioa;      /* 已选择的遥控信息对象地址。 */
+    uint8_t value;     /* 已选择的 SCO 状态值。 */
+    uint8_t selected;  /* 是否存在待执行的选择。 */
 } iec104_single_command_t;
 
 /* 每个遥调点独立保存选择值，执行报文必须与该值完全一致。 */
 typedef struct {
-    uint32_t ioa;
-    uint32_t value;
-    uint8_t value_length;
-    uint8_t selected;
+    uint32_t ioa;         /* 该遥调点的信息对象地址。 */
+    uint32_t value;       /* 已选择的参数原始值。 */
+    uint8_t value_length; /* 参数值在线序中的字节数。 */
+    uint8_t selected;     /* 是否存在待固化的选择。 */
 } iec104_tuning_point_t;
 
 typedef struct {
     int8_t point_index;
-    uint32_t ioa;
+    uint32_t ioa;         /* 当前解析对象的信息对象地址。 */
     uint32_t value;
     uint16_t register_value;
     uint8_t pi;
@@ -147,10 +148,16 @@ static void iec104_handle_single_command(const iec104_frame_t *frame, uint32_t n
 
     /* 选择报文只有在 ACTCON 成功入队后才生效。 */
     if (selecting != 0U) {
+        TF_DEBUG("APP",
+                 "IEC104 YK id=0x%06lX start value=%u select=1\n",
+                 (unsigned long)ioa, (unsigned)value);
         if (iec104_send_command_response(frame, IEC104_COT_ACTCON, now)) {
             selected_command.ioa = ioa;
             selected_command.value = value;
             selected_command.selected = 1U;
+            TF_DEBUG("APP",
+                     "IEC104 YK id=0x%06lX selected value=%u\n",
+                     (unsigned long)ioa, (unsigned)value);
         }
         return;
     }
@@ -160,11 +167,17 @@ static void iec104_handle_single_command(const iec104_frame_t *frame, uint32_t n
         (selected_command.ioa != ioa) ||
         (selected_command.value != value)) {
         selected_command.selected = 0U;
+        TF_DEBUG("APP",
+                 "IEC104 YK id=0x%06lX execute rejected value=%u\n",
+                 (unsigned long)ioa, (unsigned)value);
         (void)iec104_send_command_response(frame, IEC104_COT_ACTTERM | IEC104_COT_NEGATIVE, now);
         return;
     }
 
     selected_command.selected = 0U;
+    TF_DEBUG("APP",
+             "IEC104 YK id=0x%06lX execute value=%u\n",
+             (unsigned long)ioa, (unsigned)value);
     if ((value != 0U) &&
         iec104_send_command_response(frame, IEC104_COT_ACTTERM, now)) {
         iec104_app_remote_control_execute(ioa);
@@ -371,5 +384,3 @@ void iec104_dispatch_send_spontaneous(uint32_t now)
         previous_status_points[i] = points[i];
     }
 }
-
-

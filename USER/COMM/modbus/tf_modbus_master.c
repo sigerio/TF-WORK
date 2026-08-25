@@ -1,5 +1,6 @@
 #include "tf_modbus_master.h"
 
+#include <stdio.h>
 #include <string.h>
 
 #include "board.h"
@@ -145,6 +146,47 @@ static tf_modbus_data_cache_t s_cache = {
     .xm9505 = { .slave_addr = MODULE_MODBUS_XM9505_ADDR },
     .ac = { .slave_addr = MODULE_MODBUS_AC_ADDR },
 };
+
+static const char *tf_modbus_bus_name(tf_modbus_bus_t bus)
+{
+    return (bus == TF_MODBUS_BUS_WEATHER) ? "WEATHER" : "AC";
+}
+
+static void tf_modbus_log_frame(const char *direction,
+                                tf_modbus_bus_t bus,
+                                const uint8_t *frame,
+                                uint32_t length)
+{
+    if(0 == (debug_ctrl.bits.ac&&debug_ctrl.bits.weth)) return;
+    char line[128];
+    uint32_t offset = 0U;
+
+    /* 本机日志只监控 AC 空调；气象板通信保持静默。 */
+    if ((bus != TF_MODBUS_BUS_AC) || (direction == NULL) ||
+        (frame == NULL) || (length == 0U)) {
+        return;
+    }
+
+    /* 分段打印，避免长 Modbus 响应超过调试串口格式化缓冲区。 */
+    while (offset < length) {
+        int used = snprintf(line, sizeof(line),
+                            "MODBUS %s bus=%s len=%lu:", direction,
+                            tf_modbus_bus_name(bus), (unsigned long)length);
+        uint32_t count = 0U;
+
+        if (used < 0) {
+            return;
+        }
+        while ((count < 24U) && (offset < length) &&
+               ((uint32_t)used + 4U < sizeof(line))) {
+            used += snprintf(&line[used], sizeof(line) - (size_t)used,
+                             " %02X", frame[offset++]);
+            count++;
+        }
+        (void)snprintf(&line[used], sizeof(line) - (size_t)used, "\n");
+        TF_DEBUG("APP", "%s", line);
+    }
+}
 
 static uint32_t s_query_step;
 
@@ -788,6 +830,7 @@ static void tf_modbus_process_frame(tf_modbus_bus_t bus,
     uint8_t expect_function;
     modbus_rtu_status_t status;
 
+    tf_modbus_log_frame("RX", bus, frame, len);
     expect_function = expect->rsp_func;
     TF_MODBUS_DIAG_INC(bus, response_count);
     if (frame[1] == (uint8_t)(expect_function | 0x80U)) {
@@ -795,18 +838,7 @@ static void tf_modbus_process_frame(tf_modbus_bus_t bus,
 
         status = modbus_rtu_parse_exception(frame, len, expect->slave_addr,
                                             expect_function, &exception);
-        if (status == MODBUS_RTU_OK) {
-            TF_DEBUG("APP",
-                     "modbus exception slave_addr=%u func=0x%02X code=0x%02X dev=%u start=0x%04X count=%u\n",
-                     exception.address, exception.function,
-                     exception.exception_code, (uint8_t)expect->dev_type,
-                     expect->start_addr, expect->quantity);
-        } else {
-            TF_DEBUG("APP",
-                     "modbus exception parse failed status=%u slave_addr=%u func=0x%02X len=%lu\n",
-                     (uint8_t)status, expect->slave_addr, expect_function,
-                     (unsigned long)len);
-        }
+
         tf_modbus_count_parse_error(bus, status);
         if ((status == MODBUS_RTU_OK) &&
             tf_modbus_req_is_write(expect->req_type)) {
@@ -870,6 +902,15 @@ void tf_modbus_query_task(void)
         plan = &periodic_query_plan[step];
         if ((plan->read != NULL) && (plan->slave_addr != NULL)) {
             queued = plan->read(*plan->slave_addr, plan->start_addr, plan->quantity);
+            // if (step >= TF_MODBUS_QUERY_AC_MEASURE) {
+            //     TF_DEBUG("APP",
+            //              "MODBUS query target=AC step=%u slave=%u start=0x%04X count=%u queued=%u\n",
+            //              (unsigned)step,
+            //              (unsigned)*plan->slave_addr,
+            //              (unsigned)plan->start_addr,
+            //              (unsigned)plan->quantity,
+            //              queued ? 1U : 0U);
+            // }
         }
     }
 
@@ -895,6 +936,7 @@ static bool tf_modbus_send_next(tf_modbus_bus_t bus)
         return false;
     }
 
+    tf_modbus_log_frame("TX", bus, tx_buf, frame_len);
     master->rsp_expect = expect;
     com_link_rx_clear(link);
 
