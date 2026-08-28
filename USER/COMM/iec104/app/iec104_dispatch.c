@@ -9,6 +9,7 @@
 #include "iec104_app.h"
 
 #define IEC104_COMMON_ADDRESS 0x0001U
+#define IEC104_MEASURE_POINTS_PER_ASDU 16U
 
 /* 单点遥控采用“选择后执行”，此处保存最近一次已确认选择。 */
 typedef struct {
@@ -100,17 +101,32 @@ static uint8_t iec104_send_status_points(const iec104_status_point_t *points, ui
 
 static uint8_t iec104_send_measure_points(const iec104_measure_point_t *points, uint8_t cot, uint32_t now)
 {
-    uint8_t objects[IEC104_APP_MEASURE_POINT_COUNT * 8U];
+    uint8_t objects[IEC104_MEASURE_POINTS_PER_ASDU * 8U];
+    uint8_t start = 0U;
+    uint8_t count;
     uint8_t i;
 
-    /* SQ=0：每个短浮点对象编码 IOA、4 字节 IEEE 754 值和 1 字节 QDS。 */
-    for (i = 0U; i < IEC104_APP_MEASURE_POINT_COUNT; i++) {
-        iec104_asdu_ioa_write(&objects[i * 8U], points[i].ioa);
-        memcpy(&objects[i * 8U + 3U], &points[i].value, sizeof(points[i].value));
-        objects[i * 8U + 7U] = points[i].quality;
+    /* 固定 16 点一帧；32 个短浮点遥测对象在总召时拆为两帧。 */
+    while (start < IEC104_APP_MEASURE_POINT_COUNT) {
+        count = (uint8_t)(IEC104_APP_MEASURE_POINT_COUNT - start);
+        if (count > IEC104_MEASURE_POINTS_PER_ASDU) {
+            count = IEC104_MEASURE_POINTS_PER_ASDU;
+        }
+        for (i = 0U; i < count; i++) {
+            const iec104_measure_point_t *point = &points[start + i];
+
+            iec104_asdu_ioa_write(&objects[i * 8U], point->ioa);
+            memcpy(&objects[i * 8U + 3U], &point->value, sizeof(point->value));
+            objects[i * 8U + 7U] = point->quality;
+        }
+        if (!iec104_dispatch_send(IEC104_TI_M_ME_NC_1, count, cot,
+                                  objects, (uint8_t)(count * 8U), now)) {
+            return 0U;
+        }
+        start = (uint8_t)(start + count);
     }
 
-    return iec104_dispatch_send(IEC104_TI_M_ME_NC_1, IEC104_APP_MEASURE_POINT_COUNT, cot, objects, sizeof(objects), now);
+    return 1U;
 }
 
 static void iec104_handle_single_command(const iec104_frame_t *frame, uint32_t now)

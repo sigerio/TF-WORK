@@ -1,6 +1,7 @@
 #include "motor_motion.h"
 
 #include "../../../USER/OS/tf_os.h"
+#include "../../LIB/m_bit.h"
 #include "../../TASK/tf_usr_event_task.h"
 #include "../module_ws2812/module_ws2812_status.h"
 #include "motor_driver.h"
@@ -99,6 +100,14 @@ static void set_door_motion_phase(motion_phase_e phase)
     }
 
     door_motion.phase = phase;
+    if (phase == MOTION_OVER)
+    {
+        cancel_signal(OS_DOOR_S);
+    }
+    else
+    {
+        set_signal(OS_DOOR_S);
+    }
 }
 
 static void set_platform_motion_phase(motion_phase_e phase)
@@ -109,6 +118,14 @@ static void set_platform_motion_phase(motion_phase_e phase)
     }
 
     platform_motion.phase = phase;
+    if (phase == MOTION_OVER)
+    {
+        cancel_signal(OS_HELIPAD_S);
+    }
+    else
+    {
+        set_signal(OS_HELIPAD_S);
+    }
 }
 
 /** 同时停止两扇门电机 */
@@ -163,6 +180,7 @@ static void refresh_door_run_status(void)
     {
         run_status.door = MODULE_MOTO_DOOR_STATE_INTERMEDIATE;
     }
+    stop_door_motors();
 }
 
 static void lock_door_if_closed(void)
@@ -432,6 +450,10 @@ static motion_phase_e handle_platform_motion_error(void)
 
 void module_moto_sync_init(void)
 {
+    cancel_signal(OS_DOOR_S);
+    cancel_signal(OS_HELIPAD_S);
+    (void)module_moto_brake(DOOR1_MOTOR_ID);
+    (void)module_moto_brake(DOOR2_MOTOR_ID);
     refresh_door_run_status();
     lock_door_if_closed();
     refresh_platform_run_status();

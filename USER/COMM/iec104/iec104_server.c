@@ -4,6 +4,7 @@
 #include <stdio.h>
 
 #include "../../OS/tf_os.h"
+#include "../../LIB/m_bit.h"
 #include "../../tf_debug.h"
 #include "app/iec104_dispatch.h"
 #include "core/iec104_apci.h"
@@ -139,6 +140,7 @@ void iec104_server_init(void)
 
     iec104_session_init(&callbacks, tf_os_tick_get());
     iec104_dispatch_init();
+    cancel_signal(OS_IEC104_ONLINE);
 }
 
 void iec104_server_comm_task(void)
@@ -151,6 +153,11 @@ void iec104_server_comm_task(void)
     }
     iec104_session_service_timers(now);
     iec104_send_queued_apdu();
+    if (iec104_session_data_transfer_started() != 0U) {
+        set_signal(OS_IEC104_ONLINE);
+    } else {
+        cancel_signal(OS_IEC104_ONLINE);
+    }
 }
 
 void iec104_server_report_task(void)

@@ -16,6 +16,7 @@
 #include "tf_modbus_xm8189.h"
 #include "tf_modbus_xm8537.h"
 #include "tf_modbus_xm9505.h"
+#include "../../LIB/m_bit.h"
 #include "tf_debug.h"
 
 /*
@@ -57,7 +58,7 @@
 #endif
 
 #ifndef MODULE_MODBUS_XM7828_ADDR
-#define MODULE_MODBUS_XM7828_ADDR              1U
+#define MODULE_MODBUS_XM7828_ADDR              5U
 #endif
 
 #ifndef MODULE_MODBUS_XM8189_ADDR
@@ -73,7 +74,7 @@
 #endif
 
 #ifndef MODULE_MODBUS_AC_ADDR
-#define MODULE_MODBUS_AC_ADDR                   5U
+#define MODULE_MODBUS_AC_ADDR                   1U
 #endif
 
 typedef enum {
@@ -81,8 +82,11 @@ typedef enum {
     TF_MODBUS_QUERY_XM8189,
     TF_MODBUS_QUERY_XM8537,
     TF_MODBUS_QUERY_XM9505,
+    TF_MODBUS_QUERY_XM7828_CALIBRATION,
+    TF_MODBUS_QUERY_XM8189_CALIBRATION,
     TF_MODBUS_QUERY_AC_MEASURE,
     TF_MODBUS_QUERY_AC_HUMIDITY,
+    TF_MODBUS_QUERY_AC_CONTROL,
     TF_MODBUS_QUERY_AC_STATUS,
     TF_MODBUS_QUERY_STEP_COUNT,
 } tf_modbus_query_step_t;
@@ -184,7 +188,8 @@ static void tf_modbus_log_frame(const char *direction,
             count++;
         }
         (void)snprintf(&line[used], sizeof(line) - (size_t)used, "\n");
-        TF_DEBUG("APP", "%s", line);
+        tf_debug_printf(TF_COLOR_RESET "%s[%-6s]" TF_COLOR_RESET " %s",
+                        tf_tag_color("APP"), "APP", line);
     }
 }
 
@@ -207,6 +212,14 @@ static const tf_modbus_query_plan_t periodic_query_plan[TF_MODBUS_QUERY_STEP_COU
         tf_modbus_xm9505_read, &s_cache.xm9505.slave_addr,
         XUNCHIP_REG_DATA0, XM9505_MEASUREMENT_REG_COUNT,
     },
+    [TF_MODBUS_QUERY_XM7828_CALIBRATION] = {
+        tf_modbus_xm7828_read, &s_cache.xm7828.slave_addr,
+        XM7828_REG_TEMP_CALIBRATION, XM7828_CALIBRATION_REG_COUNT,
+    },
+    [TF_MODBUS_QUERY_XM8189_CALIBRATION] = {
+        tf_modbus_xm8189_read, &s_cache.xm8189.slave_addr,
+        XM8189_REG_SPEED_CALIBRATION, XM8189_CALIBRATION_REG_COUNT,
+    },
     [TF_MODBUS_QUERY_AC_MEASURE] = {
         tf_modbus_ac_read_params, &s_cache.ac.slave_addr,
         AC_PARAM_SEG_MEASURE_START, AC_PARAM_SEG_MEASURE_COUNT,
@@ -214,6 +227,10 @@ static const tf_modbus_query_plan_t periodic_query_plan[TF_MODBUS_QUERY_STEP_COU
     [TF_MODBUS_QUERY_AC_HUMIDITY] = {
         tf_modbus_ac_read_params, &s_cache.ac.slave_addr,
         AC_PARAM_SEG_HUMIDITY_START, AC_PARAM_SEG_HUMIDITY_COUNT,
+    },
+    [TF_MODBUS_QUERY_AC_CONTROL] = {
+        tf_modbus_ac_read_params, &s_cache.ac.slave_addr,
+        AC_PARAM_SEG_CONTROL_START, AC_PARAM_SEG_CONTROL_COUNT,
     },
     [TF_MODBUS_QUERY_AC_STATUS] = {
         tf_modbus_ac_read_status, &s_cache.ac.slave_addr,
@@ -247,6 +264,11 @@ static void tf_modbus_reset_devices(void)
     memset(&s_cache.xm8537.status, 0, sizeof(s_cache.xm8537.status));
     memset(&s_cache.xm9505.status, 0, sizeof(s_cache.xm9505.status));
     memset(&s_cache.ac.status, 0, sizeof(s_cache.ac.status));
+    cancel_signal(OS_485_TH_ONLINE);
+    cancel_signal(OS_485_WIND_ONLINE);
+    cancel_signal(OS_485_WATER_ONLINE);
+    cancel_signal(OS_485_RAIN_ONLINE);
+    cancel_signal(OS_485_AC_ONLINE);
 }
 
 static void tf_modbus_reset_runtime(void)
@@ -304,9 +326,43 @@ static tf_modbus_dev_status_t *tf_modbus_status_of(tf_modbus_dev_type_t dev_type
     }
 }
 
+static bool tf_modbus_signal_of(tf_modbus_dev_type_t dev_type,
+                                OS_RUN_SIGNAL_EN *signal)
+{
+    if (signal == NULL) {
+        return false;
+    }
+
+    switch (dev_type) {
+    case TF_MODBUS_DEV_XM7828_TH:
+        *signal = OS_485_TH_ONLINE;
+        return true;
+
+    case TF_MODBUS_DEV_XM8189_WIND:
+        *signal = OS_485_WIND_ONLINE;
+        return true;
+
+    case TF_MODBUS_DEV_XM8537_WATER:
+        *signal = OS_485_WATER_ONLINE;
+        return true;
+
+    case TF_MODBUS_DEV_XM9505_RAIN:
+        *signal = OS_485_RAIN_ONLINE;
+        return true;
+
+    case TF_MODBUS_DEV_AC:
+        *signal = OS_485_AC_ONLINE;
+        return true;
+
+    default:
+        return false;
+    }
+}
+
 static void tf_modbus_device_offline(const tf_modbus_rsp_expect_t *expect)
 {
     tf_modbus_dev_status_t *status;
+    OS_RUN_SIGNAL_EN signal;
 
     if (expect == NULL) {
         return;
@@ -317,11 +373,15 @@ static void tf_modbus_device_offline(const tf_modbus_rsp_expect_t *expect)
         status->online = false;
         status->sensor_fault = false;
     }
+    if (tf_modbus_signal_of(expect->dev_type, &signal)) {
+        cancel_signal(signal);
+    }
 }
 
 static void tf_modbus_device_online(const tf_modbus_rsp_expect_t *expect)
 {
     tf_modbus_dev_status_t *status;
+    OS_RUN_SIGNAL_EN signal;
 
     if (expect == NULL) {
         return;
@@ -330,6 +390,9 @@ static void tf_modbus_device_online(const tf_modbus_rsp_expect_t *expect)
     status = tf_modbus_status_of(expect->dev_type);
     if (status != NULL) {
         status->online = true;
+    }
+    if (tf_modbus_signal_of(expect->dev_type, &signal)) {
+        set_signal(signal);
     }
 }
 
@@ -683,9 +746,19 @@ static modbus_rtu_status_t tf_modbus_parse_wait_xm_read(
 {
     switch (expect->dev_type) {
     case TF_MODBUS_DEV_XM7828_TH:
+        if ((expect->start_addr == XM7828_REG_TEMP_CALIBRATION) &&
+            (expect->quantity == XM7828_CALIBRATION_REG_COUNT)) {
+            return tf_modbus_xm7828_parse_calibration(
+                frame, len, expect->slave_addr, &cache->xm7828);
+        }
         return tf_modbus_xm7828_parse(frame, len, expect->slave_addr,
                                       &cache->xm7828);
     case TF_MODBUS_DEV_XM8189_WIND:
+        if ((expect->start_addr == XM8189_REG_SPEED_CALIBRATION) &&
+            (expect->quantity == XM8189_CALIBRATION_REG_COUNT)) {
+            return tf_modbus_xm8189_parse_calibration(
+                frame, len, expect->slave_addr, &cache->xm8189);
+        }
         return tf_modbus_xm8189_parse(frame, len, expect->slave_addr,
                                       &cache->xm8189);
     case TF_MODBUS_DEV_XM8537_WATER:
@@ -852,8 +925,8 @@ static void tf_modbus_process_frame(tf_modbus_bus_t bus,
 
     status = tf_modbus_parse_waiting(bus, frame, len);
     if (status == MODBUS_RTU_OK) {
+        tf_modbus_device_online(expect);
         if (expect->dev_type == TF_MODBUS_DEV_AC) {
-            tf_modbus_device_online(expect);
             if (expect->req_type == TF_MODBUS_REQ_READ_BITS) {
                 tf_modbus_ac_update_fault();
             }

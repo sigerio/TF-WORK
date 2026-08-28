@@ -605,6 +605,16 @@
               <FilePath>..\USER\LIB\heap_4.h</FilePath>
             </File>
             <File>
+              <FileName>m_bit.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\USER\LIB\m_bit.c</FilePath>
+            </File>
+            <File>
+              <FileName>m_bit.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\USER\LIB\m_bit.h</FilePath>
+            </File>
+            <File>
               <FileName>modbus_rtu.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\USER\LIB\modbus_rtu.c</FilePath>

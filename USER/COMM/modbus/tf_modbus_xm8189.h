@@ -9,6 +9,9 @@ extern "C" {
 
 #define XM8189_SPEED_MAX_CENTI_MS           3000U
 #define XM8189_DIRECTION_MAX_CENTI_DEG      36000U
+#define XM8189_REG_SPEED_CALIBRATION         0x006BU
+#define XM8189_REG_DIRECTION_CALIBRATION     0x006CU
+#define XM8189_CALIBRATION_REG_COUNT         2U
 #define XM8189_MEASUREMENT_REG_COUNT        2U
 
 /**
@@ -20,12 +23,19 @@ typedef struct {
     tf_modbus_dev_status_t status;                    /**< 设备运行状态（在线、传感器故障）*/
     uint16_t speed_centi;                             /**< 风速（百分之一 m/s），0~3000 */
     uint16_t direction_centi_deg;                     /**< 风向（百分之一度），0~36000  */
+    int16_t speed_calibration_centi_ms;               /**< 风速偏移（0.01 m/s）         */
+    int16_t direction_calibration_centi_deg;          /**< 风向偏移（0.01 度）          */
+    uint8_t calibration_valid;                         /**< bit0 风速、bit1 风向校正有效 */
 } xm8189_wind_data_t;
 
 modbus_rtu_status_t tf_modbus_xm8189_parse(const uint8_t *frame,
                                            uint32_t len,
                                            uint8_t slave_addr,
                                            xm8189_wind_data_t *out);
+modbus_rtu_status_t tf_modbus_xm8189_parse_calibration(const uint8_t *frame,
+                                                       uint32_t len,
+                                                       uint8_t slave_addr,
+                                                       xm8189_wind_data_t *out);
 bool tf_modbus_xm8189_read(uint8_t slave_addr, uint16_t start_reg,
                            uint16_t reg_count);
 bool tf_modbus_xm8189_write(uint8_t slave_addr, uint16_t reg,

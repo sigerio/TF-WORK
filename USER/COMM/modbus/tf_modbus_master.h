@@ -68,11 +68,11 @@ typedef enum {
 
 /** @brief 支持的 Modbus 从机设备类型 */
 typedef enum {
-    TF_MODBUS_DEV_XM7828_TH = 0,    /**< XM7828 温湿度传感器                */
+    TF_MODBUS_DEV_AC = 0,               /**< 空调设备                           */
+    TF_MODBUS_DEV_XM7828_TH,    /**< XM7828 温湿度传感器                */
     TF_MODBUS_DEV_XM8189_WIND,      /**< XM8189 风速风向传感器              */
     TF_MODBUS_DEV_XM8537_WATER,     /**< XM8537 水浸传感器                  */
     TF_MODBUS_DEV_XM9505_RAIN,      /**< XM9505 雨量传感器                  */
-    TF_MODBUS_DEV_AC,               /**< 空调设备                           */
     TF_MODBUS_DEV_COUNT,            /**< 设备类型数量                       */
 } tf_modbus_dev_type_t;
 

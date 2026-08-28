@@ -8,8 +8,8 @@ extern "C" {
 #endif
 
 #define IEC104_APP_STATUS_POINT_COUNT  34U
-#define IEC104_APP_MEASURE_POINT_COUNT 15U
-#define IEC104_APP_TUNING_POINT_COUNT  13U
+#define IEC104_APP_MEASURE_POINT_COUNT 32U
+#define IEC104_APP_TUNING_POINT_COUNT  17U
 
 /* 单点遥信：信息对象地址、SPI 值和 SIQ 质量位。 */
 typedef struct {
@@ -33,7 +33,7 @@ void iec104_app_collect_interrogation(iec104_status_point_t *status_points, iec1
 uint8_t iec104_app_remote_control_is_known(uint32_t ioa);
 void iec104_app_remote_control_execute(uint32_t ioa);
 
-/* 按本地点表查找遥调 IOA、解析对应值并写入空调参数。 */
+/* 按本地点表查找遥调 IOA、解析对应值并写入空调或传感器参数。 */
 int8_t iec104_app_tuning_index(uint32_t ioa);
 uint8_t iec104_app_tuning_value_length(uint32_t ioa);
 uint8_t iec104_app_tuning_value_parse(uint32_t ioa, const uint8_t *data, uint32_t *value, uint8_t *value_length, uint16_t *register_value);

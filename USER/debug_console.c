@@ -286,31 +286,62 @@ static bool debug_console_apply_command(const char *command)
         return false;
     }
 
-    if (strncmp(command, "AC:", 3U) == 0) {
+    if (strncmp(command, "AC:", 3U) == 0)
+    {
         value_text = &command[3];
-        if (!debug_console_parse_value(value_text, 1U, &value)) {
+        if (!debug_console_parse_value(value_text, 1U, &value))
+        {
             return false;
         }
         debug_ctrl.bits.ac = value;
-    } else if (strncmp(command, "IEC:", 4U) == 0) {
+    }
+    else if (strncmp(command, "IEC:", 4U) == 0)
+    {
         value_text = &command[4];
-        if (!debug_console_parse_value(value_text, 1U, &value)) {
+        if (!debug_console_parse_value(value_text, 1U, &value))
+        {
             return false;
         }
         debug_ctrl.bits.iec = value;
-    } else if (strncmp(command, "WETH:", 5U) == 0) {
+    }
+    else if (strncmp(command, "WETH:", 5U) == 0)
+    {
         value_text = &command[5];
-        if (!debug_console_parse_value(value_text, 1U, &value)) {
+        if (!debug_console_parse_value(value_text, 1U, &value))
+        {
             return false;
         }
         debug_ctrl.bits.weth = value;
-    } else if (strncmp(command, "WSE:", 4U) == 0) {
+    }
+    else if (strncmp(command, "WSE:", 4U) == 0)
+    {
         value_text = &command[4];
-        if (!debug_console_parse_value(value_text, 2U, &value)) {
+        if (!debug_console_parse_value(value_text, 6U, &value))
+        {
             return false;
         }
         debug_ctrl.bits.wse = value;
-    } else {
+    }
+    else if (strncmp(command, "DOR:", 4U) == 0)
+    {
+        value_text = &command[4];
+        if (!debug_console_parse_value(value_text, 1U, &value))
+        {
+            return false;
+        }
+        debug_ctrl.bits.dor = value;
+    }
+    else if (strncmp(command, "HEI:", 4U) == 0)
+    {
+        value_text = &command[4];
+        if (!debug_console_parse_value(value_text, 1U, &value))
+        {
+            return false;
+        }
+        debug_ctrl.bits.hei = value;
+    }
+    else
+    {
         return false;
     }
 

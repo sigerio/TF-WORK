@@ -14,11 +14,10 @@ static strip_run_state_t platform_run_state = {0};
 static void dev_door_actioning(uint16_t cyctime)
 {
     for (int i = 0; i < 4; i++) {
-        ws2812_flash_with(MODULE_WS2812_STRIP_0, (i << 1), (i << 1) + 1,
-                          WS2812_RGB(252, 3, 3), WS2812_RGB(0, 0, 0),
-                          -1, 90, &door_flash_state);
+        ws2812_flash_with(MODULE_WS2812_STRIP_0, (i << 1), (i << 1) + 1, WS2812_RGB(252, 3, 3), WS2812_RGB(0, 0, 0), -1, 90, &door_flash_state);
     }
     ws2812_flash_update(4, 4, -1, &door_flash_state);
+
 }
 
 /* 平台动作：尾部跑马灯 */

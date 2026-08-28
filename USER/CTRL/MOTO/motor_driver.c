@@ -49,7 +49,7 @@ typedef struct {
 
 static const module_moto_hw_config_t motor_hw_configs[MODULE_MOTO_ID_COUNT] = {
     [PLATFORM_MOTOR_ID] = {
-        BOARD_PWM_PLATFORM, BOARD_PWM_CH0, BOARD_PWM_CH1,
+        BOARD_PWM_PLATFORM, BOARD_PWM_CH1, BOARD_PWM_CH0,
         BOARD_PIN_PLATFORM_EXTEND_SIGNAL, BOARD_PIN_PLATFORM_RETRACT_SIGNAL,
     },
     [DOOR1_MOTOR_ID] = {

@@ -36,17 +36,15 @@
 #define IEC104_IOA_YC_DOOR_STATE    0x000100UL /* 门状态码。 */
 #define IEC104_IOA_YC_HELIPED_STATE 0x000101UL /* 停机坪状态码。 */
 
-/* 本机遥控 YK：门、停机坪和普通灯的开关命令。 */
+/* 本机遥控 YK：门、停机坪和内部照明的开关命令。 */
 #define IEC104_IOA_YK_DOOR_OPEN       0x000200UL /* 门打开。 */
 #define IEC104_IOA_YK_DOOR_CLOSE      0x000201UL /* 门关闭。 */
 #define IEC104_IOA_YK_HELIPED_EXTEND  0x000210UL /* 停机坪伸出。 */
 #define IEC104_IOA_YK_HELIPED_RETRACT 0x000211UL /* 停机坪收回。 */
-#define IEC104_IOA_YK_INDICATOR_LIGHT_ON  0x000220UL /* 打开 PC3 指示灯。 */
-#define IEC104_IOA_YK_INDICATOR_LIGHT_OFF 0x000221UL /* 关闭 PC3 指示灯。 */
+#define IEC104_IOA_YK_485_AC_POWER_ON  0x000220UL /* 空调开机。 */
+#define IEC104_IOA_YK_485_AC_POWER_OFF 0x000221UL /* 空调关机。 */
 #define IEC104_IOA_YK_INTERIOR_LIGHT_ON   0x000222UL /* 打开 PC4 内部照明。 */
 #define IEC104_IOA_YK_INTERIOR_LIGHT_OFF  0x000223UL /* 关闭 PC4 内部照明。 */
-#define IEC104_IOA_YK_DECORATIVE_LIGHT_ON 0x000224UL /* 打开 PC5 独立装饰灯。 */
-#define IEC104_IOA_YK_DECORATIVE_LIGHT_OFF 0x000225UL /* 关闭 PC5 独立装饰灯。 */
 
 /* RS-485 子设备遥信 YX。 */
 #define IEC104_IOA_YX_485_TH_ONLINE    0x001000UL /* 温湿度传感器在线。 */
@@ -102,6 +100,10 @@
 #define IEC104_IOA_YT_485_AC_HUMIDITY_ALARM 0x00300AUL /* 湿度告警阈值。 */
 #define IEC104_IOA_YT_485_AC_HUMIDITY_CALIBRATION 0x00300BUL /* 湿度校准值。 */
 #define IEC104_IOA_YT_485_AC_MODE_CONTROL 0x00300CUL /* 空调模式控制寄存器。 */
+#define IEC104_IOA_YT_485_TH_TEMP_CALIBRATION 0x00300DUL /* 温度传感器校正值。 */
+#define IEC104_IOA_YT_485_TH_HUMIDITY_CALIBRATION 0x00300EUL /* 湿度传感器校正值。 */
+#define IEC104_IOA_YT_485_WIND_SPEED_CALIBRATION 0x00300FUL /* 风速传感器校正值。 */
+#define IEC104_IOA_YT_485_WIND_DIRECTION_CALIBRATION 0x003010UL /* 风向传感器校正值。 */
 
 /* 一次采集保存所有业务模块数据，保证同一总召唤中的遥信和遥测来自同批快照。 */
 typedef struct {
@@ -268,6 +270,8 @@ static void iec104_app_fill_measure_points(const iec104_app_snapshot_t *snapshot
     uint8_t ac_evaporator_quality = iec104_status_quality(ac->status.online, ac->run_status.evaporator_sensor_fault);
     uint8_t ac_condenser_quality = iec104_status_quality(ac->status.online, ac->run_status.condenser_sensor_fault);
     uint8_t ac_humidity_quality = iec104_status_quality(ac->status.online, ac->run_status.humidity_sensor_fault);
+    uint8_t ac_param_quality = iec104_status_quality(ac->status.online, 0U);
+    uint8_t ac_param_invalid = IEC104_QUALITY_IV | IEC104_QUALITY_NT;
 
     points[0] = (iec104_measure_point_t){ IEC104_IOA_YC_DOOR_STATE,
         (float)iec104_door_state_code(&snapshot->motor), 0U };
@@ -299,6 +303,57 @@ static void iec104_app_fill_measure_points(const iec104_app_snapshot_t *snapshot
         (float)ac->params.condenser_temp_deci_c / 10.0F, ac_condenser_quality };
     points[14] = (iec104_measure_point_t){ IEC104_IOA_YC_485_AC_HUMIDITY,
         (float)ac->params.humidity_deci_rh / 10.0F, ac_humidity_quality };
+    points[15] = (iec104_measure_point_t){ IEC104_IOA_YT_485_AC_COOLING_START,
+        (float)ac->params.cooling_start_deci_c / 10.0F,
+        ac->params.marks.bit.cooling_start ? ac_param_quality : ac_param_invalid };
+    points[16] = (iec104_measure_point_t){ IEC104_IOA_YT_485_AC_COOLING_STOP,
+        (float)ac->params.cooling_stop_deci_c / 10.0F,
+        ac->params.marks.bit.cooling_stop ? ac_param_quality : ac_param_invalid };
+    points[17] = (iec104_measure_point_t){ IEC104_IOA_YT_485_AC_HEATING_START,
+        (float)ac->params.heating_start_deci_c / 10.0F,
+        ac->params.marks.bit.heating_start ? ac_param_quality : ac_param_invalid };
+    points[18] = (iec104_measure_point_t){ IEC104_IOA_YT_485_AC_HEATING_STOP,
+        (float)ac->params.heating_stop_deci_c / 10.0F,
+        ac->params.marks.bit.heating_stop ? ac_param_quality : ac_param_invalid };
+    points[19] = (iec104_measure_point_t){ IEC104_IOA_YT_485_AC_HIGH_TEMP_ALARM,
+        (float)ac->params.high_temp_alarm_deci_c / 10.0F,
+        ac->params.marks.bit.high_temp_alarm ? ac_param_quality : ac_param_invalid };
+    points[20] = (iec104_measure_point_t){ IEC104_IOA_YT_485_AC_LOW_TEMP_ALARM,
+        (float)ac->params.low_temp_alarm_deci_c / 10.0F,
+        ac->params.marks.bit.low_temp_alarm ? ac_param_quality : ac_param_invalid };
+    points[21] = (iec104_measure_point_t){ IEC104_IOA_YT_485_AC_CONDENSER_HIGH_PROTECT,
+        (float)ac->params.condenser_high_protect_deci_c / 10.0F,
+        ac->params.marks.bit.condenser_high_protect ? ac_param_quality : ac_param_invalid };
+    points[22] = (iec104_measure_point_t){ IEC104_IOA_YT_485_AC_EVAPORATOR_FREEZE_PROTECT,
+        (float)ac->params.evaporator_freeze_protect_deci_c / 10.0F,
+        ac->params.marks.bit.evaporator_freeze_protect ? ac_param_quality : ac_param_invalid };
+    points[23] = (iec104_measure_point_t){ IEC104_IOA_YT_485_AC_DEHUMIDIFY_START,
+        (float)ac->params.dehumidify_start_deci_rh / 10.0F,
+        ac->params.marks.bit.dehumidify_start ? ac_param_quality : ac_param_invalid };
+    points[24] = (iec104_measure_point_t){ IEC104_IOA_YT_485_AC_DEHUMIDIFY_STOP,
+        (float)ac->params.dehumidify_stop_deci_rh / 10.0F,
+        ac->params.marks.bit.dehumidify_stop ? ac_param_quality : ac_param_invalid };
+    points[25] = (iec104_measure_point_t){ IEC104_IOA_YT_485_AC_HUMIDITY_ALARM,
+        (float)ac->params.humidity_alarm_deci_rh / 10.0F,
+        ac->params.marks.bit.humidity_alarm ? ac_param_quality : ac_param_invalid };
+    points[26] = (iec104_measure_point_t){ IEC104_IOA_YT_485_AC_HUMIDITY_CALIBRATION,
+        (float)ac->params.humidity_calibration,
+        ac->params.marks.bit.humidity_calibration ? ac_param_quality : ac_param_invalid };
+    points[27] = (iec104_measure_point_t){ IEC104_IOA_YT_485_AC_MODE_CONTROL,
+        (float)ac->params.mode_control,
+        ac->params.marks.bit.mode_control ? ac_param_quality : ac_param_invalid };
+    points[28] = (iec104_measure_point_t){ IEC104_IOA_YT_485_TH_TEMP_CALIBRATION,
+        (float)th->temperature_calibration_centi_c / 100.0F,
+        (th->calibration_valid & 0x01U) ? th_quality : ac_param_invalid };
+    points[29] = (iec104_measure_point_t){ IEC104_IOA_YT_485_TH_HUMIDITY_CALIBRATION,
+        (float)th->humidity_calibration_centi_rh / 100.0F,
+        (th->calibration_valid & 0x02U) ? th_quality : ac_param_invalid };
+    points[30] = (iec104_measure_point_t){ IEC104_IOA_YT_485_WIND_SPEED_CALIBRATION,
+        (float)wind->speed_calibration_centi_ms / 100.0F,
+        (wind->calibration_valid & 0x01U) ? wind_quality : ac_param_invalid };
+    points[31] = (iec104_measure_point_t){ IEC104_IOA_YT_485_WIND_DIRECTION_CALIBRATION,
+        (float)wind->direction_calibration_centi_deg / 100.0F,
+        (wind->calibration_valid & 0x02U) ? wind_quality : ac_param_invalid };
 
     /* 参数区尚未收到有效寄存器数据时，四个空调遥测点统一标为无效。 */
     if (ac->params.marks.raw == 0U) {
@@ -335,17 +390,37 @@ typedef struct {
     void (*execute)(void);
 } iec104_command_desc_t;
 
+static void iec104_app_ac_power_set(uint8_t on)
+{
+    ac_device_t ac;
+
+    memset(&ac, 0, sizeof(ac));
+    if (tf_modbus_ac_get(&ac)) {
+        (void)tf_modbus_ac_write_status(ac.slave_addr,
+                                        AC_STATUS_POWER_MONITOR,
+                                        on != 0U);
+    }
+}
+
+static void iec104_app_ac_power_on(void)
+{
+    iec104_app_ac_power_set(1U);
+}
+
+static void iec104_app_ac_power_off(void)
+{
+    iec104_app_ac_power_set(0U);
+}
+
 static const iec104_command_desc_t iec104_command_table[] = {
     { IEC104_IOA_YK_DOOR_OPEN,       module_moto_business_request_door_open },
     { IEC104_IOA_YK_DOOR_CLOSE,      module_moto_business_request_door_close },
     { IEC104_IOA_YK_HELIPED_EXTEND,  module_moto_business_request_platform_extend },
     { IEC104_IOA_YK_HELIPED_RETRACT, module_moto_business_request_platform_retract },
-    { IEC104_IOA_YK_INDICATOR_LIGHT_ON,  light_output_set_indicator_on },
-    { IEC104_IOA_YK_INDICATOR_LIGHT_OFF, light_output_set_indicator_off },
+    { IEC104_IOA_YK_485_AC_POWER_ON,  iec104_app_ac_power_on },
+    { IEC104_IOA_YK_485_AC_POWER_OFF, iec104_app_ac_power_off },
     { IEC104_IOA_YK_INTERIOR_LIGHT_ON,   light_output_set_interior_light_on },
     { IEC104_IOA_YK_INTERIOR_LIGHT_OFF,  light_output_set_interior_light_off },
-    { IEC104_IOA_YK_DECORATIVE_LIGHT_ON, light_output_set_decorative_light_on },
-    { IEC104_IOA_YK_DECORATIVE_LIGHT_OFF, light_output_set_decorative_light_off },
 };
 
 #define IEC104_COMMAND_TABLE_COUNT \
@@ -387,22 +462,33 @@ typedef struct {
     uint32_t ioa;
     uint16_t reg;
     uint8_t value_length;
+    uint8_t target;
 } iec104_tuning_desc_t;
 
+typedef enum {
+    IEC104_TUNING_TARGET_AC = 0U,
+    IEC104_TUNING_TARGET_XM7828,
+    IEC104_TUNING_TARGET_XM8189,
+} iec104_tuning_target_t;
+
 static const iec104_tuning_desc_t iec104_tuning_table[] = {
-    { IEC104_IOA_YT_485_AC_COOLING_START,           AC_PARAM_REG_COOLING_START,          4U },
-    { IEC104_IOA_YT_485_AC_COOLING_STOP,            AC_PARAM_REG_COOLING_STOP,           4U },
-    { IEC104_IOA_YT_485_AC_HEATING_START,           AC_PARAM_REG_HEATING_START,          4U },
-    { IEC104_IOA_YT_485_AC_HEATING_STOP,            AC_PARAM_REG_HEATING_STOP,           4U },
-    { IEC104_IOA_YT_485_AC_HIGH_TEMP_ALARM,         AC_PARAM_REG_HIGH_TEMP_ALARM,        4U },
-    { IEC104_IOA_YT_485_AC_LOW_TEMP_ALARM,          AC_PARAM_REG_LOW_TEMP_ALARM,         4U },
-    { IEC104_IOA_YT_485_AC_CONDENSER_HIGH_PROTECT,  AC_PARAM_REG_CONDENSER_HIGH_PROTECT, 4U },
-    { IEC104_IOA_YT_485_AC_EVAPORATOR_FREEZE_PROTECT, AC_PARAM_REG_EVAPORATOR_FREEZE,    4U },
-    { IEC104_IOA_YT_485_AC_DEHUMIDIFY_START,        AC_PARAM_REG_DEHUMIDIFY_START,       4U },
-    { IEC104_IOA_YT_485_AC_DEHUMIDIFY_STOP,         AC_PARAM_REG_DEHUMIDIFY_STOP,        4U },
-    { IEC104_IOA_YT_485_AC_HUMIDITY_ALARM,          AC_PARAM_REG_HUMIDITY_ALARM,         4U },
-    { IEC104_IOA_YT_485_AC_HUMIDITY_CALIBRATION,    AC_PARAM_REG_HUMIDITY_CALIBRATION,   4U },
-    { IEC104_IOA_YT_485_AC_MODE_CONTROL,            AC_PARAM_REG_MODE_CONTROL,           2U },
+    { IEC104_IOA_YT_485_AC_COOLING_START,           AC_PARAM_REG_COOLING_START,          4U, IEC104_TUNING_TARGET_AC },
+    { IEC104_IOA_YT_485_AC_COOLING_STOP,            AC_PARAM_REG_COOLING_STOP,           4U, IEC104_TUNING_TARGET_AC },
+    { IEC104_IOA_YT_485_AC_HEATING_START,           AC_PARAM_REG_HEATING_START,          4U, IEC104_TUNING_TARGET_AC },
+    { IEC104_IOA_YT_485_AC_HEATING_STOP,            AC_PARAM_REG_HEATING_STOP,           4U, IEC104_TUNING_TARGET_AC },
+    { IEC104_IOA_YT_485_AC_HIGH_TEMP_ALARM,         AC_PARAM_REG_HIGH_TEMP_ALARM,        4U, IEC104_TUNING_TARGET_AC },
+    { IEC104_IOA_YT_485_AC_LOW_TEMP_ALARM,          AC_PARAM_REG_LOW_TEMP_ALARM,         4U, IEC104_TUNING_TARGET_AC },
+    { IEC104_IOA_YT_485_AC_CONDENSER_HIGH_PROTECT,  AC_PARAM_REG_CONDENSER_HIGH_PROTECT, 4U, IEC104_TUNING_TARGET_AC },
+    { IEC104_IOA_YT_485_AC_EVAPORATOR_FREEZE_PROTECT, AC_PARAM_REG_EVAPORATOR_FREEZE,    4U, IEC104_TUNING_TARGET_AC },
+    { IEC104_IOA_YT_485_AC_DEHUMIDIFY_START,        AC_PARAM_REG_DEHUMIDIFY_START,       4U, IEC104_TUNING_TARGET_AC },
+    { IEC104_IOA_YT_485_AC_DEHUMIDIFY_STOP,         AC_PARAM_REG_DEHUMIDIFY_STOP,        4U, IEC104_TUNING_TARGET_AC },
+    { IEC104_IOA_YT_485_AC_HUMIDITY_ALARM,          AC_PARAM_REG_HUMIDITY_ALARM,         4U, IEC104_TUNING_TARGET_AC },
+    { IEC104_IOA_YT_485_AC_HUMIDITY_CALIBRATION,    AC_PARAM_REG_HUMIDITY_CALIBRATION,   4U, IEC104_TUNING_TARGET_AC },
+    { IEC104_IOA_YT_485_AC_MODE_CONTROL,            AC_PARAM_REG_MODE_CONTROL,           2U, IEC104_TUNING_TARGET_AC },
+    { IEC104_IOA_YT_485_TH_TEMP_CALIBRATION,        XM7828_REG_TEMP_CALIBRATION,         4U, IEC104_TUNING_TARGET_XM7828 },
+    { IEC104_IOA_YT_485_TH_HUMIDITY_CALIBRATION,    XM7828_REG_HUMIDITY_CALIBRATION,     4U, IEC104_TUNING_TARGET_XM7828 },
+    { IEC104_IOA_YT_485_WIND_SPEED_CALIBRATION,     XM8189_REG_SPEED_CALIBRATION,        4U, IEC104_TUNING_TARGET_XM8189 },
+    { IEC104_IOA_YT_485_WIND_DIRECTION_CALIBRATION, XM8189_REG_DIRECTION_CALIBRATION,    4U, IEC104_TUNING_TARGET_XM8189 },
 };
 
 #define IEC104_TUNING_TABLE_COUNT \
@@ -439,16 +525,57 @@ static uint16_t iec104_app_tuning_register(uint32_t ioa)
     return (index < 0) ? 0U : iec104_tuning_table[index].reg;
 }
 
+static uint8_t iec104_app_tuning_target(uint32_t ioa)
+{
+    int8_t index = iec104_app_tuning_index(ioa);
+
+    return (index < 0) ? 0xFFU : iec104_tuning_table[index].target;
+}
+
+static uint8_t iec104_app_is_sensor_calibration(uint32_t ioa)
+{
+    return (ioa >= IEC104_IOA_YT_485_TH_TEMP_CALIBRATION) &&
+           (ioa <= IEC104_IOA_YT_485_WIND_DIRECTION_CALIBRATION);
+}
+
+static uint8_t iec104_app_tuning_value_is_valid(uint32_t ioa,
+                                                 int16_t value)
+{
+    switch (ioa) {
+    case IEC104_IOA_YT_485_AC_COOLING_START:
+        return (value >= 200) && (value <= 550);
+
+    case IEC104_IOA_YT_485_AC_COOLING_STOP:
+        return (value >= 150) && (value <= 350);
+
+    case IEC104_IOA_YT_485_AC_HEATING_START:
+        return (value >= -300) && (value <= 150);
+
+    case IEC104_IOA_YT_485_AC_HEATING_STOP:
+        return (value >= 0) && (value <= 230);
+
+    case IEC104_IOA_YT_485_AC_HIGH_TEMP_ALARM:
+        return (value >= 300) && (value <= 600);
+
+    case IEC104_IOA_YT_485_AC_LOW_TEMP_ALARM:
+        return (value >= -100) && (value <= 100);
+
+    default:
+        return 1U; /* 协议未给出其余参数的数值范围。 */
+    }
+}
+
 uint8_t iec104_app_tuning_value_parse(uint32_t ioa, const uint8_t *data, uint32_t *value, uint8_t *value_length, uint16_t *register_value)
 {
     float float_value;
+    int16_t integer_value;
 
     /* 模式控制在线路上是 2 字节整数，其余参数是 4 字节短浮点值。 */
     if (ioa == IEC104_IOA_YT_485_AC_MODE_CONTROL) {
         *value = iec104_u16_read(data);
         *value_length = 2U;
         *register_value = (uint16_t)*value;
-        return (*register_value <= 0x7FFFU);
+        return (*register_value <= 3U);
     }
 
     memcpy(&float_value, data, sizeof(float_value));
@@ -459,22 +586,74 @@ uint8_t iec104_app_tuning_value_parse(uint32_t ioa, const uint8_t *data, uint32_
 
     memcpy(value, data, sizeof(float_value));
     *value_length = 4U;
+    if (ioa == IEC104_IOA_YT_485_AC_HUMIDITY_CALIBRATION) {
+        integer_value = (int16_t)float_value;
+        if ((float)integer_value != float_value) {
+            return 0U;
+        }
+        *register_value = (uint16_t)integer_value;
+        return 1U;
+    }
+
+    if (iec104_app_is_sensor_calibration(ioa)) {
+        float raw_value = float_value * 100.0F;
+        float error;
+
+        if ((raw_value < -1000.0F) || (raw_value > 1000.0F)) {
+            return 0U;
+        }
+        integer_value = (int16_t)(raw_value +
+                                  ((raw_value >= 0.0F) ? 0.5F : -0.5F));
+        error = raw_value - (float)integer_value;
+        if (error < 0.0F) {
+            error = -error;
+        }
+        if (error > 0.001F) {
+            return 0U;
+        }
+        *register_value = (uint16_t)integer_value;
+        return 1U;
+    }
+
     /* 空调寄存器以 0.1 为单位保存有符号值。 */
-    *register_value = (uint16_t)(int16_t)(float_value * 10.0F);
+    integer_value = (int16_t)(float_value * 10.0F);
+    if (!iec104_app_tuning_value_is_valid(ioa, integer_value)) {
+        return 0U;
+    }
+    *register_value = (uint16_t)integer_value;
     return 1U;
 }
 
 uint8_t iec104_app_tuning_write(uint32_t ioa, uint16_t value)
 {
     ac_device_t ac;
+    xm7828_th_data_t th;
+    xm8189_wind_data_t wind;
     uint16_t register_address;
 
-    memset(&ac, 0, sizeof(ac));
-    if (!tf_modbus_ac_get(&ac)) {
+    register_address = iec104_app_tuning_register(ioa);
+    if (register_address == 0U) {
         return 0U;
     }
 
-    register_address = iec104_app_tuning_register(ioa);
-    return (register_address != 0U) &&
-           tf_modbus_ac_write_param(ac.slave_addr, register_address, (int16_t)value);
+    switch (iec104_app_tuning_target(ioa)) {
+    case IEC104_TUNING_TARGET_AC:
+        memset(&ac, 0, sizeof(ac));
+        return tf_modbus_ac_get(&ac) &&
+               tf_modbus_ac_write_param(ac.slave_addr, register_address,
+                                        (int16_t)value);
+
+    case IEC104_TUNING_TARGET_XM7828:
+        memset(&th, 0, sizeof(th));
+        return tf_modbus_xm7828_get(&th) &&
+               tf_modbus_xm7828_write(th.slave_addr, register_address, value);
+
+    case IEC104_TUNING_TARGET_XM8189:
+        memset(&wind, 0, sizeof(wind));
+        return tf_modbus_xm8189_get(&wind) &&
+               tf_modbus_xm8189_write(wind.slave_addr, register_address, value);
+
+    default:
+        return 0U;
+    }
 }

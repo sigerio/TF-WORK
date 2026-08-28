@@ -20,6 +20,13 @@ static const tf_modbus_reg_map_t xm7828_register_maps[] = {
                       TF_MODBUS_REG_U16),
 };
 
+static const tf_modbus_reg_map_t xm7828_calibration_maps[] = {
+    XM7828_RANGE_ITEM(0U, temperature_calibration_centi_c,
+                      -1000, 1000, TF_MODBUS_REG_I16),
+    XM7828_RANGE_ITEM(1U, humidity_calibration_centi_rh,
+                      -1000, 1000, TF_MODBUS_REG_I16),
+};
+
 static bool tf_modbus_xm7828_calib_ok(uint16_t value)
 {
     int16_t signed_value = (int16_t)value;
@@ -173,4 +180,23 @@ modbus_rtu_status_t tf_modbus_xm7828_parse(const uint8_t *frame,
         (uint16_t)offsetof(xm7828_th_data_t, status),
         xm7828_register_maps,
         (uint16_t)(sizeof(xm7828_register_maps) / sizeof(xm7828_register_maps[0])));
+}
+
+modbus_rtu_status_t tf_modbus_xm7828_parse_calibration(const uint8_t *frame,
+                                                       uint32_t len,
+                                                       uint8_t slave_addr,
+                                                       xm7828_th_data_t *out)
+{
+    modbus_rtu_status_t status;
+
+    status = tf_modbus_parse_ranges(
+        frame, len, slave_addr, XM7828_CALIBRATION_REG_COUNT, out,
+        (uint16_t)offsetof(xm7828_th_data_t, status), xm7828_calibration_maps,
+        (uint16_t)(sizeof(xm7828_calibration_maps) /
+                   sizeof(xm7828_calibration_maps[0])));
+    if ((status == MODBUS_RTU_OK) && !out->status.sensor_fault) {
+        out->calibration_valid = 0x03U;
+    }
+
+    return status;
 }

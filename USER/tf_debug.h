@@ -68,7 +68,9 @@ typedef union
         uint8_t ac: 1;
         uint8_t weth: 1;
         uint8_t iec: 1;
-        uint8_t wse: 2;
+        uint8_t wse: 3;
+        uint8_t dor: 1;
+        uint8_t hei: 1;
     }bits;
     uint8_t byte;
     
