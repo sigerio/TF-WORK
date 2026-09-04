@@ -25,14 +25,14 @@ typedef struct {
 typedef struct {
     uint16_t expected_sequence;
     uint8_t pending_count;
-    uint32_t first_pending_tick;
 } iec104_receive_ack_t;
 
-/* STARTDT 数据传输状态和 T1/T3 测试帧监视状态。 */
+/* STARTDT 数据传输状态、周期 S 帧和 T1/T3 测试帧监视状态。 */
 typedef struct {
     uint8_t data_transfer_started;
     uint8_t test_frame_pending;
     uint32_t last_activity_tick;
+    uint32_t last_s_frame_tick;
     uint32_t test_frame_tick;
 } iec104_link_supervision_t;
 
@@ -76,7 +76,7 @@ static void iec104_session_reset(uint32_t now)
     memset(&session, 0, sizeof(session));
     session.callbacks = callbacks;
     session.link.last_activity_tick = now;
-    session.receive_ack.first_pending_tick = now;
+    session.link.last_s_frame_tick = now;
     session.link.test_frame_tick = now;
     iec104_txq_init();
 }
@@ -137,6 +137,7 @@ static uint8_t iec104_send_s_ack(uint32_t now)
     }
 
     session.receive_ack.pending_count = 0U;
+    session.link.last_s_frame_tick = now;
     iec104_activity_record(now);
     return 1U;
 }
@@ -155,9 +156,6 @@ static void iec104_handle_i_frame(const iec104_frame_t *frame, uint32_t now)
     }
 
     session.receive_ack.expected_sequence = (uint16_t)((session.receive_ack.expected_sequence + 1U) & IEC104_SEQUENCE_MASK);
-    if (session.receive_ack.pending_count == 0U) {
-        session.receive_ack.first_pending_tick = now;
-    }
     session.receive_ack.pending_count++;
 
     if ((session.link.data_transfer_started != 0U) &&
@@ -176,6 +174,7 @@ static void iec104_handle_u_frame(const iec104_frame_t *frame, uint32_t now)
     switch (frame->u_command) {
     case IEC104_U_STARTDT_ACT:
         session.link.data_transfer_started = 1U;
+        session.link.last_s_frame_tick = now;
         (void)iec104_send_u(IEC104_U_STARTDT_CON);
         break;
 
@@ -230,9 +229,9 @@ void iec104_session_handle_frame(const iec104_frame_t *frame, uint32_t now)
 
 void iec104_session_service_timers(uint32_t now)
 {
-    /* T2：接收窗口未满 W 时也必须在规定时间内确认。 */
-    if ((session.receive_ack.pending_count > 0U) &&
-        ((now - session.receive_ack.first_pending_tick) >= IEC104_T2_MS)) {
+    /* T2：数据传输期间定期发送 S 帧，上报最新 N(R)。 */
+    if ((session.link.data_transfer_started != 0U) &&
+        ((now - session.link.last_s_frame_tick) >= IEC104_T2_MS)) {
         (void)iec104_send_s_ack(now);
     }
 
