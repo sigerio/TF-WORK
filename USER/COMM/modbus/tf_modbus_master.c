@@ -54,7 +54,7 @@
  */
 
 #ifndef MODULE_MODBUS_RESPONSE_TIMEOUT_MS
-#define MODULE_MODBUS_RESPONSE_TIMEOUT_MS      60U
+#define MODULE_MODBUS_RESPONSE_TIMEOUT_MS      200U
 #endif
 
 #ifndef MODULE_MODBUS_XM7828_ADDR
@@ -66,11 +66,11 @@
 #endif
 
 #ifndef MODULE_MODBUS_XM8537_ADDR
-#define MODULE_MODBUS_XM8537_ADDR              3U
+#define MODULE_MODBUS_XM8537_ADDR              4U
 #endif
 
 #ifndef MODULE_MODBUS_XM9505_ADDR
-#define MODULE_MODBUS_XM9505_ADDR              4U
+#define MODULE_MODBUS_XM9505_ADDR              3U
 #endif
 
 #ifndef MODULE_MODBUS_AC_ADDR
@@ -161,13 +161,14 @@ static void tf_modbus_log_frame(const char *direction,
                                 const uint8_t *frame,
                                 uint32_t length)
 {
-    if(0 == (debug_ctrl.bits.ac&&debug_ctrl.bits.weth)) return;
     char line[128];
     uint32_t offset = 0U;
 
-    /* 本机日志只监控 AC 空调；气象板通信保持静默。 */
-    if ((bus != TF_MODBUS_BUS_AC) || (direction == NULL) ||
-        (frame == NULL) || (length == 0U)) {
+    if ((direction == NULL) || (frame == NULL) || (length == 0U)) {
+        return;
+    }
+    if (((bus == TF_MODBUS_BUS_AC) && (debug_ctrl.bits.ac == 0U)) ||
+        ((bus == TF_MODBUS_BUS_WEATHER) && (debug_ctrl.bits.weth == 0U))) {
         return;
     }
 
