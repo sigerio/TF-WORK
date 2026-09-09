@@ -1,12 +1,12 @@
-#include "iec104_dispatch.h"
+#include "COMM/iec104/app/iec104_dispatch.h"
 
 #include <stddef.h>
 #include <string.h>
 
-#include "../core/iec104_asdu.h"
-#include "../core/iec104_session.h"
-#include "../../../tf_debug.h"
-#include "iec104_app.h"
+#include "COMM/iec104/core/iec104_asdu.h"
+#include "COMM/iec104/core/iec104_session.h"
+#include "DEBUG/debug_log.h"
+#include "COMM/iec104/app/iec104_app.h"
 
 #define IEC104_COMMON_ADDRESS 0x0001U
 #define IEC104_MEASURE_POINTS_PER_ASDU 16U
@@ -119,8 +119,7 @@ static uint8_t iec104_send_measure_points(const iec104_measure_point_t *points, 
             memcpy(&objects[i * 8U + 3U], &point->value, sizeof(point->value));
             objects[i * 8U + 7U] = point->quality;
         }
-        if (!iec104_dispatch_send(IEC104_TI_M_ME_NC_1, count, cot,
-                                  objects, (uint8_t)(count * 8U), now)) {
+        if (!iec104_dispatch_send(IEC104_TI_M_ME_NC_1, count, cot, objects, (uint8_t)(count * 8U), now)) {
             return 0U;
         }
         start = (uint8_t)(start + count);
@@ -141,8 +140,7 @@ static void iec104_handle_single_command(const iec104_frame_t *frame, uint32_t n
         return;
     }
 
-    if ((frame->asdu[1] != 1U) ||
-        (frame->asdu_length != IEC104_ASDU_HEADER_LENGTH + 4U)) {
+    if ((frame->asdu[1] != 1U) || (frame->asdu_length != IEC104_ASDU_HEADER_LENGTH + 4U)) {
         (void)iec104_send_command_response(frame, IEC104_COT_ACTCON | IEC104_COT_NEGATIVE, now);
         return;
     }
@@ -164,38 +162,27 @@ static void iec104_handle_single_command(const iec104_frame_t *frame, uint32_t n
 
     /* 选择报文只有在 ACTCON 成功入队后才生效。 */
     if (selecting != 0U) {
-        TF_DEBUG("APP",
-                 "IEC104 YK id=0x%06lX start value=%u select=1\n",
-                 (unsigned long)ioa, (unsigned)value);
+        DEBUG("APP", "IEC104 YK id=0x%06lX start value=%u select=1\n", (unsigned long)ioa, (unsigned)value);
         if (iec104_send_command_response(frame, IEC104_COT_ACTCON, now)) {
             selected_command.ioa = ioa;
             selected_command.value = value;
             selected_command.selected = 1U;
-            TF_DEBUG("APP",
-                     "IEC104 YK id=0x%06lX selected value=%u\n",
-                     (unsigned long)ioa, (unsigned)value);
+            DEBUG("APP", "IEC104 YK id=0x%06lX selected value=%u\n", (unsigned long)ioa, (unsigned)value);
         }
         return;
     }
 
     /* 执行报文的 IOA 和命令值必须与已确认的选择报文一致。 */
-    if ((selected_command.selected == 0U) ||
-        (selected_command.ioa != ioa) ||
-        (selected_command.value != value)) {
+    if ((selected_command.selected == 0U) || (selected_command.ioa != ioa) || (selected_command.value != value)) {
         selected_command.selected = 0U;
-        TF_DEBUG("APP",
-                 "IEC104 YK id=0x%06lX execute rejected value=%u\n",
-                 (unsigned long)ioa, (unsigned)value);
+        DEBUG("APP", "IEC104 YK id=0x%06lX execute rejected value=%u\n", (unsigned long)ioa, (unsigned)value);
         (void)iec104_send_command_response(frame, IEC104_COT_ACTTERM | IEC104_COT_NEGATIVE, now);
         return;
     }
 
     selected_command.selected = 0U;
-    TF_DEBUG("APP",
-             "IEC104 YK id=0x%06lX execute value=%u\n",
-             (unsigned long)ioa, (unsigned)value);
-    if ((value != 0U) &&
-        iec104_send_command_response(frame, IEC104_COT_ACTTERM, now)) {
+    DEBUG("APP", "IEC104 YK id=0x%06lX execute value=%u\n", (unsigned long)ioa, (unsigned)value);
+    if ((value != 0U) && iec104_send_command_response(frame, IEC104_COT_ACTTERM, now)) {
         iec104_app_remote_control_execute(ioa);
     }
     if (value == 0U) {
@@ -212,10 +199,8 @@ static void iec104_handle_interrogation(const iec104_frame_t *frame, uint32_t no
         return;
     }
 
-    if ((frame->asdu[1] != 1U) ||
-        (frame->asdu_length != IEC104_ASDU_HEADER_LENGTH + 4U) ||
-        (iec104_asdu_ioa_read(&frame->asdu[6]) != 0U) ||
-        (frame->asdu[9] != 0x14U)) {
+    if ((frame->asdu[1] != 1U) || (frame->asdu_length != IEC104_ASDU_HEADER_LENGTH + 4U) ||
+        (iec104_asdu_ioa_read(&frame->asdu[6]) != 0U) || (frame->asdu[9] != 0x14U)) {
         (void)iec104_send_command_response(frame, IEC104_COT_UNKNOWN_IOA, now);
         return;
     }
@@ -248,8 +233,7 @@ static void iec104_handle_tuning(const iec104_frame_t *frame, uint32_t now)
     }
 
     count = frame->asdu[1] & 0x7FU;
-    if (((frame->asdu[1] & 0x80U) != 0U) || (count == 0U) ||
-        (count > IEC104_APP_TUNING_POINT_COUNT)) {
+    if (((frame->asdu[1] & 0x80U) != 0U) || (count == 0U) || (count > IEC104_APP_TUNING_POINT_COUNT)) {
         (void)iec104_send_command_response(frame, IEC104_COT_ACTCON | IEC104_COT_NEGATIVE, now);
         return;
     }
@@ -282,8 +266,7 @@ static void iec104_handle_tuning(const iec104_frame_t *frame, uint32_t now)
         }
 
         expected_value_length = iec104_app_tuning_value_length(object->ioa);
-        if ((uint16_t)offset + 4U + expected_value_length >
-            frame->asdu_length) {
+        if ((uint16_t)offset + 4U + expected_value_length > frame->asdu_length) {
             (void)iec104_send_command_response(frame, IEC104_COT_ACTCON | IEC104_COT_NEGATIVE, now);
             return;
         }
@@ -320,11 +303,8 @@ static void iec104_handle_tuning(const iec104_frame_t *frame, uint32_t now)
             continue;
         }
 
-        if ((point->selected == 0U) ||
-            (point->ioa != object->ioa) ||
-            (point->value != object->value) ||
-            (point->value_length != object->value_length) ||
-            !iec104_app_tuning_write(object->ioa, object->register_value)) {
+        if ((point->selected == 0U) || (point->ioa != object->ioa) || (point->value != object->value) || (point->value_length != object->value_length) || !iec104_app_tuning_write(object->ioa,
+            object->register_value)) {
             (void)iec104_send_command_response(frame, IEC104_COT_ACTTERM | IEC104_COT_NEGATIVE, now);
             return;
         }
@@ -339,12 +319,20 @@ static void iec104_handle_tuning(const iec104_frame_t *frame, uint32_t now)
 void iec104_dispatch_init(void)
 {
     iec104_status_point_t status_points[IEC104_APP_STATUS_POINT_COUNT];
+    uint8_t i;
 
     memset(&selected_command, 0, sizeof(selected_command));
     memset(tuning_points, 0, sizeof(tuning_points));
     /* 以初始化时的实际状态作为基线，避免启动后把全部遥信误判为变位。 */
     iec104_app_collect_status_points(status_points);
     memcpy(previous_status_points, status_points, sizeof(previous_status_points));
+    /* 上电已经存在的限位故障也必须在 STARTDT 后主动上送。 */
+    for (i = 0U; i < IEC104_APP_STATUS_POINT_COUNT; i++) {
+        if ((previous_status_points[i].ioa == IEC104_IOA_YX_DOOR_LIMIT_FAULT) ||
+            (previous_status_points[i].ioa == IEC104_IOA_YX_PLATFORM_LIMIT_FAULT)) {
+            previous_status_points[i].value = 0U;
+        }
+    }
 }
 
 void iec104_dispatch_reset(void)
@@ -386,8 +374,7 @@ void iec104_dispatch_send_spontaneous(uint32_t now)
 
     iec104_app_collect_status_points(points);
     for (i = 0U; i < IEC104_APP_STATUS_POINT_COUNT; i++) {
-        if ((points[i].value == previous_status_points[i].value) &&
-            (points[i].quality == previous_status_points[i].quality)) {
+        if ((points[i].value == previous_status_points[i].value) && (points[i].quality == previous_status_points[i].quality)) {
             continue;
         }
 

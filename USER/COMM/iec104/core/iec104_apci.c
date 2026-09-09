@@ -1,4 +1,4 @@
-#include "iec104_apci.h"
+#include "COMM/iec104/core/iec104_apci.h"
 
 #include <string.h>
 
@@ -20,8 +20,7 @@ static uint8_t iec104_u_command_is_valid(iec104_u_command_e u_command)
 
 static uint16_t iec104_sequence_decode(const uint8_t *control)
 {
-    uint16_t sequence = (uint16_t)control[0] |
-                        ((uint16_t)control[1] << 8U);
+    uint16_t sequence = (uint16_t)control[0] | ((uint16_t)control[1] << 8U);
 
     /* 序列号在线路上左移一位，bit0 留给帧格式标志。 */
     return sequence >> 1U;
@@ -39,10 +38,8 @@ uint16_t iec104_build_i(uint8_t *apdu, uint16_t apdu_capacity, const uint8_t *as
 {
     uint16_t apdu_length = IEC104_CONTROL_LENGTH + asdu_length + 2U;
 
-    if ((apdu == NULL) || (asdu == NULL) || (asdu_length == 0U) ||
-        (asdu_length > IEC104_MAX_ASDU_LENGTH) ||
-        (send_sequence > 0x7FFFU) || (receive_sequence > 0x7FFFU) ||
-        (apdu_length > apdu_capacity)) {
+    if ((apdu == NULL) || (asdu == NULL) || (asdu_length == 0U) || (asdu_length > IEC104_MAX_ASDU_LENGTH) ||
+        (send_sequence > 0x7FFFU) || (receive_sequence > 0x7FFFU) || (apdu_length > apdu_capacity)) {
         return 0U;
     }
 
@@ -57,8 +54,7 @@ uint16_t iec104_build_i(uint8_t *apdu, uint16_t apdu_capacity, const uint8_t *as
 
 uint16_t iec104_build_s(uint8_t *apdu, uint16_t apdu_capacity, uint16_t receive_sequence)
 {
-    if ((apdu == NULL) || (receive_sequence > 0x7FFFU) ||
-        (apdu_capacity < 6U)) {
+    if ((apdu == NULL) || (receive_sequence > 0x7FFFU) || (apdu_capacity < 6U)) {
         return 0U;
     }
 
@@ -73,8 +69,7 @@ uint16_t iec104_build_s(uint8_t *apdu, uint16_t apdu_capacity, uint16_t receive_
 
 uint16_t iec104_build_u(uint8_t *apdu, uint16_t apdu_capacity, iec104_u_command_e u_command)
 {
-    if ((apdu == NULL) || (apdu_capacity < 6U) ||
-        !iec104_u_command_is_valid(u_command)) {
+    if ((apdu == NULL) || (apdu_capacity < 6U) || !iec104_u_command_is_valid(u_command)) {
         return 0U;
     }
 
@@ -94,14 +89,12 @@ uint8_t iec104_decode(const uint8_t *apdu, uint16_t apdu_length, iec104_frame_t 
     uint8_t body_length;
     uint8_t asdu_length;
 
-    if ((apdu == NULL) || (decoded == NULL) || (apdu_length < 6U) ||
-        (apdu[0] != IEC104_START_BYTE)) {
+    if ((apdu == NULL) || (decoded == NULL) || (apdu_length < 6U) || (apdu[0] != IEC104_START_BYTE)) {
         return 0U;
     }
 
     body_length = apdu[1];
-    if ((body_length < IEC104_CONTROL_LENGTH) ||
-        (body_length > (IEC104_MAX_FRAME_LENGTH - 2U)) ||
+    if ((body_length < IEC104_CONTROL_LENGTH) || (body_length > (IEC104_MAX_FRAME_LENGTH - 2U)) ||
         (apdu_length != (uint16_t)body_length + 2U)) {
         return 0U;
     }
@@ -123,8 +116,7 @@ uint8_t iec104_decode(const uint8_t *apdu, uint16_t apdu_length, iec104_frame_t 
         decoded->receive_sequence = iec104_sequence_decode(&control[2]);
         decoded->u_command = IEC104_U_NONE;
     }
-    else if ((control[0] == 0x01U) && (control[1] == 0U) && ((control[2] & 0x01U) == 0U) &&
-            (control[3] == 0U) && (asdu_length == 0U))
+    else if ((control[0] == 0x01U) && (control[1] == 0U) && ((control[2] & 0x01U) == 0U) && (control[3] == 0U) && (asdu_length == 0U))
     {
         decoded->format = IEC104_FRAME_S;
         decoded->send_sequence = 0U;
@@ -132,7 +124,7 @@ uint8_t iec104_decode(const uint8_t *apdu, uint16_t apdu_length, iec104_frame_t 
         decoded->u_command = IEC104_U_NONE;
     }
     else if (((control[0] & 0x03U) == 0x03U) && (control[1] == 0U) && (control[2] == 0U) &&
-            (control[3] == 0U) && (asdu_length == 0U) && iec104_u_command_is_valid((iec104_u_command_e)control[0]))
+        (control[3] == 0U) && (asdu_length == 0U) && iec104_u_command_is_valid((iec104_u_command_e)control[0]))
     {
         decoded->format = IEC104_FRAME_U;
         decoded->send_sequence = 0U;

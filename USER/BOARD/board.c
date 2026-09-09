@@ -1,4 +1,4 @@
-#include "board.h"
+#include "BOARD/board.h"
 
 #include "gd32f10x_gpio.h"
 #include "gd32f10x_rcu.h"
@@ -70,7 +70,7 @@ const board_gpio_config_t board_gpio_configs[BOARD_PIN_COUNT] = {
     [BOARD_PIN_DOOR_LOCK]        = { GPIOB, GPIO_PIN_0, GPIO_MODE_OUT_PP, GPIO_OSPEED_50MHZ, 1U },
     [BOARD_PIN_LED_INDICATOR]    = { GPIOC, GPIO_PIN_3, GPIO_MODE_OUT_PP, GPIO_OSPEED_50MHZ, 1U },
     [BOARD_PIN_LED_INTERIOR]     = { GPIOC, GPIO_PIN_4, GPIO_MODE_OUT_PP, GPIO_OSPEED_50MHZ, 1U },
-    [BOARD_PIN_LED_STRIP_ENABLE] = { GPIOC, GPIO_PIN_5, GPIO_MODE_OUT_PP, GPIO_OSPEED_50MHZ, 1U },
+    [BOARD_PIN_DOOR_HEATER_ENABLE] = { GPIOC, GPIO_PIN_5, GPIO_MODE_OUT_PP, GPIO_OSPEED_50MHZ, 1U },
 };
 
 const board_usart_config_t board_usart_configs[BOARD_USART_COUNT] = {
@@ -161,3 +161,34 @@ const board_pwm_config_t board_pwm_configs[BOARD_PWM_COUNT] = {
         },
     },
 };
+
+void board_motor_io_init(void)
+{
+    static const board_pin_id_e inputs[] = {
+        BOARD_PIN_PLATFORM_EXTEND_LIMIT, BOARD_PIN_PLATFORM_RETRACT_LIMIT,
+        BOARD_PIN_DOOR_CLOSE_LIMIT, BOARD_PIN_DOOR_OPEN_LIMIT
+    };
+
+    rcu_periph_clock_enable(RCU_GPIOB);
+    for (unsigned i = 0; i < sizeof(inputs) / sizeof(inputs[0]); i++) {
+        const board_gpio_config_t *pin = &board_gpio_configs[inputs[i]];
+        gpio_init(pin->port, pin->mode, pin->speed, pin->pin);
+    }
+    board_door_lock_write(false);
+    gpio_init(BOARD_PIN_PORT(BOARD_PIN_DOOR_LOCK), board_gpio_configs[BOARD_PIN_DOOR_LOCK].mode,
+        board_gpio_configs[BOARD_PIN_DOOR_LOCK].speed, BOARD_PIN_PIN(BOARD_PIN_DOOR_LOCK));
+}
+
+void board_motor_read_limits(board_motor_limits_t *limits)
+{
+    if (limits == 0) return;
+    limits->platform_extended = gpio_input_bit_get(BOARD_PIN_PORT(BOARD_PIN_PLATFORM_EXTEND_LIMIT), BOARD_PIN_PIN(BOARD_PIN_PLATFORM_EXTEND_LIMIT)) == RESET;
+    limits->platform_retracted = gpio_input_bit_get(BOARD_PIN_PORT(BOARD_PIN_PLATFORM_RETRACT_LIMIT), BOARD_PIN_PIN(BOARD_PIN_PLATFORM_RETRACT_LIMIT)) == RESET;
+    limits->door_closed = gpio_input_bit_get(BOARD_PIN_PORT(BOARD_PIN_DOOR_CLOSE_LIMIT), BOARD_PIN_PIN(BOARD_PIN_DOOR_CLOSE_LIMIT)) == RESET;
+    limits->door_opened = gpio_input_bit_get(BOARD_PIN_PORT(BOARD_PIN_DOOR_OPEN_LIMIT), BOARD_PIN_PIN(BOARD_PIN_DOOR_OPEN_LIMIT)) == RESET;
+}
+
+void board_door_lock_write(bool locked)
+{
+    gpio_bit_write(BOARD_PIN_PORT(BOARD_PIN_DOOR_LOCK), BOARD_PIN_PIN(BOARD_PIN_DOOR_LOCK), locked ? RESET : SET);
+}

@@ -33,12 +33,12 @@ OF SUCH DAMAGE.
 */
 
 #include "gd32f10x_it.h"
-#include "../USER/debug_console.h"
-#include "../USER/COMM/iec104/port/iec104_port.h"
-#include "../USER/COMM/modbus/tf_modbus_master.h"
-#include "../USER/CTRL/module_ws2812/module_ws2812.h"
+#include "DEBUG/debug_console.h"
+#include "COMM/iec104/port/iec104_port.h"
+#include "COMM/modbus/modbus_master.h"
+#include "CONTROL/ws2812/ws2812_driver.h"
 
-extern void tf_delay_systick_irq_handler(void);
+#include "BOARD/board_time.h"
 
 
 /*!
@@ -149,17 +149,17 @@ void PendSV_Handler(void)
 */
 void SysTick_Handler(void)
 {
-    tf_delay_systick_irq_handler();
+    board_time_systick_irq_handler();
 }
 
 void USART0_IRQHandler(void)
 {
-    tf_modbus_weather_irq();
+    modbus_weather_irq();
 }
 
 void UART3_IRQHandler(void)
 {
-    tf_modbus_ac_irq();
+    modbus_ac_irq();
 }
 
 void USART1_IRQHandler(void)

@@ -1,8 +1,8 @@
-#include "iec104_txq.h"
+#include "COMM/iec104/core/iec104_txq.h"
 
 #include <string.h>
 
-#include "iec104_apci.h"
+#include "COMM/iec104/core/iec104_apci.h"
 
 /*
  * 发送队列 —— 长度前缀式线性字节缓冲区。
@@ -30,8 +30,7 @@ static uint16_t iec104_txq_used(void)
 
 static uint16_t iec104_txq_read_length(uint16_t offset)
 {
-    return (uint16_t)txq_buf[offset] |
-           (uint16_t)((uint16_t)txq_buf[offset + 1U] << 8U);
+    return (uint16_t)txq_buf[offset] | (uint16_t)((uint16_t)txq_buf[offset + 1U] << 8U);
 }
 
 static void iec104_txq_write_length(uint16_t offset, uint16_t length)
@@ -50,8 +49,7 @@ uint8_t iec104_txq_push(const uint8_t *apdu, uint16_t apdu_length)
 {
     uint16_t needed;
 
-    if ((apdu == NULL) || (apdu_length == 0U) ||
-        (apdu_length > IEC104_MAX_FRAME_LENGTH)) {
+    if ((apdu == NULL) || (apdu_length == 0U) || (apdu_length > IEC104_MAX_FRAME_LENGTH)) {
         return 0U;
     }
 

@@ -1,7 +1,7 @@
 #ifndef IEC104_SESSION_H
 #define IEC104_SESSION_H
 
-#include "iec104_apci.h"
+#include "COMM/iec104/core/iec104_apci.h"
 
 #ifdef __cplusplus
 extern "C" {

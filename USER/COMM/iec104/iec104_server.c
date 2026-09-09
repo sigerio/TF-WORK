@@ -1,16 +1,16 @@
-#include "iec104_server.h"
+#include "COMM/iec104/iec104_server.h"
 
 #include <stddef.h>
 #include <stdio.h>
 
-#include "../../OS/tf_os.h"
-#include "../../LIB/m_bit.h"
-#include "../../tf_debug.h"
-#include "app/iec104_dispatch.h"
-#include "core/iec104_apci.h"
-#include "core/iec104_session.h"
-#include "core/iec104_txq.h"
-#include "port/iec104_port.h"
+#include "OS/os.h"
+#include "APP/app_status.h"
+#include "DEBUG/debug_log.h"
+#include "COMM/iec104/app/iec104_dispatch.h"
+#include "COMM/iec104/core/iec104_apci.h"
+#include "COMM/iec104/core/iec104_session.h"
+#include "COMM/iec104/core/iec104_txq.h"
+#include "COMM/iec104/port/iec104_port.h"
 
 /*
  * IEC104 服务器门面。
@@ -24,10 +24,9 @@
 
 static uint8_t receive_apdu[IEC104_MAX_FRAME_LENGTH];
 
-static void iec104_log_frame(const char *direction,
-                             const uint8_t *frame,
-                             uint16_t length)
+static void iec104_log_frame(const char *direction, const uint8_t *frame, uint16_t length)
 {
+#ifdef DEBUG_ENABLE
     if(0 == debug_ctrl.bits.iec)    return;
     
     char line[128];
@@ -39,23 +38,24 @@ static void iec104_log_frame(const char *direction,
 
     /* 分段打印，避免长 APDU 超过调试串口格式化缓冲区。 */
     while (offset < length) {
-        int used = snprintf(line, sizeof(line),
-                            "IEC104 %s len=%u:", direction,
-                            (unsigned)length);
+        int used = snprintf(line, sizeof(line), "IEC104 %s len=%u:", direction, (unsigned)length);
         uint16_t count = 0U;
 
         if (used < 0) {
             return;
         }
-        while ((count < 24U) && (offset < length) &&
-               ((uint32_t)used + 4U < sizeof(line))) {
-            used += snprintf(&line[used], sizeof(line) - (size_t)used,
-                             " %02X", frame[offset++]);
+        while ((count < 24U) && (offset < length) && ((uint32_t)used + 4U < sizeof(line))) {
+            used += snprintf(&line[used], sizeof(line) - (size_t)used, " %02X", frame[offset++]);
             count++;
         }
         (void)snprintf(&line[used], sizeof(line) - (size_t)used, "\n");
-        TF_DEBUG("APP", "%s", line);
+        DEBUG("APP", "%s", line);
     }
+#else
+    (void)direction;
+    (void)frame;
+    (void)length;
+#endif
 }
 
 static uint8_t iec104_server_receive_frame(iec104_frame_t *frame)
@@ -76,9 +76,7 @@ static uint8_t iec104_server_receive_frame(iec104_frame_t *frame)
             return 0U;
         }
 
-        if ((header[0] != IEC104_START_BYTE) ||
-            (header[1] < IEC104_CONTROL_LENGTH) ||
-            (header[1] > (IEC104_MAX_FRAME_LENGTH - 2U))) {
+        if ((header[0] != IEC104_START_BYTE) || (header[1] < IEC104_CONTROL_LENGTH) || (header[1] > (IEC104_MAX_FRAME_LENGTH - 2U))) {
             (void)iec104_port_rx_read(header, 1U);
             continue;
         }
@@ -138,14 +136,14 @@ void iec104_server_init(void)
         .on_data_transfer_stop = iec104_dispatch_reset,
     };
 
-    iec104_session_init(&callbacks, tf_os_tick_get());
+    iec104_session_init(&callbacks, os_tick_get());
     iec104_dispatch_init();
     cancel_signal(OS_IEC104_ONLINE);
 }
 
 void iec104_server_comm_task(void)
 {
-    uint32_t now = tf_os_tick_get();
+    uint32_t now = os_tick_get();
 
     iec104_port_tx_service();
     if (iec104_port_rx_available() > 0U) {
@@ -162,7 +160,7 @@ void iec104_server_comm_task(void)
 
 void iec104_server_report_task(void)
 {
-    uint32_t now = tf_os_tick_get();
+    uint32_t now = os_tick_get();
 
     if (iec104_session_data_transfer_started() != 0U) {
         iec104_dispatch_send_spontaneous(now);

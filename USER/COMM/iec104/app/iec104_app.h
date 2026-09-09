@@ -7,9 +7,12 @@
 extern "C" {
 #endif
 
-#define IEC104_APP_STATUS_POINT_COUNT  34U
+#define IEC104_APP_STATUS_POINT_COUNT  36U
 #define IEC104_APP_MEASURE_POINT_COUNT 32U
 #define IEC104_APP_TUNING_POINT_COUNT  17U
+
+#define IEC104_IOA_YX_DOOR_LIMIT_FAULT     0x000017UL /* 门开/关限位冲突。 */
+#define IEC104_IOA_YX_PLATFORM_LIMIT_FAULT 0x000018UL /* 平台伸出/收回限位冲突。 */
 
 /* 单点遥信：信息对象地址、SPI 值和 SIQ 质量位。 */
 typedef struct {

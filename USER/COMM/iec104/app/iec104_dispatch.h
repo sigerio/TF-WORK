@@ -1,7 +1,7 @@
 #ifndef IEC104_DISPATCH_H
 #define IEC104_DISPATCH_H
 
-#include "../core/iec104_apci.h"
+#include "COMM/iec104/core/iec104_apci.h"
 
 #ifdef __cplusplus
 extern "C" {

@@ -3,7 +3,7 @@
 
 #include <stdint.h>
 
-#include "board.h"
+#include "BOARD/board.h"
 
 #ifdef __cplusplus
 extern "C" {

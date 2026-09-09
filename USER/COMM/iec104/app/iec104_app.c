@@ -1,25 +1,19 @@
-#include "iec104_app.h"
+#include "COMM/iec104/app/iec104_app.h"
 
+#include "COMM/modbus/modbus_devices.h"
 #include <string.h>
 
-#include "../USER/CTRL/KEY/key.h"
-#include "../../USER/CTRL/LIGHT/light_output.h"
-#include "../../USER/CTRL/MOTO/motor_driver.h"
-#include "../../USER/CTRL/MOTO/motor_business.h"
-#include "../../USER/CTRL/MOTO/motor_motion.h"
-#include "../../USER/CTRL/module_ws2812/module_ws2812_status.h"
-#include "../../modbus/tf_modbus_ac.h"
-#include "../../modbus/tf_modbus_xm7828.h"
-#include "../../modbus/tf_modbus_xm8189.h"
-#include "../../modbus/tf_modbus_xm8537.h"
-#include "../../modbus/tf_modbus_xm9505.h"
+#include "CONTROL/key/key_input.h"
+#include "CONTROL/output/aux_output.h"
+#include "CONTROL/motor/motor_control.h"
+#include "CONTROL/ws2812/ws2812_status.h"
 
 #define IEC104_QUALITY_IV 0x80U
 #define IEC104_QUALITY_NT 0x40U
 #define IEC104_QUALITY_SB 0x20U
 
 /* 工程点表：所有 IOA 均按 3 字节小端编码；数值区间按 IEC104 协议第 4.5.1 节划分。 */
-/* 本机遥信 YX：门/平台状态、急停、运行状态和灯光状态。 */
+/* 本机遥信 YX：门/平台状态、急停、灯光输出和门加热解冻使能状态。 */
 #define IEC104_IOA_YX_DOOR_OPENED       0x000001UL /* 门打开到位。 */
 #define IEC104_IOA_YX_DOOR_CLOSED       0x000002UL /* 门关闭到位。 */
 #define IEC104_IOA_YX_HELIPED_EXTENDED  0x000003UL /* 停机坪伸出到位。 */
@@ -30,13 +24,13 @@
 #define IEC104_IOA_YX_WS2812_EFFECT_ACTIVE 0x000013UL /* WS2812 门/平台灯效活动。 */
 #define IEC104_IOA_YX_INDICATOR_LIGHT_ON   0x000014UL /* PC3 指示灯点亮。 */
 #define IEC104_IOA_YX_INTERIOR_LIGHT_ON    0x000015UL /* PC4 内部照明点亮。 */
-#define IEC104_IOA_YX_DECORATIVE_LIGHT_ON  0x000016UL /* PC5 独立装饰灯点亮。 */
+#define IEC104_IOA_YX_DOOR_HEATER_ENABLED  0x000016UL /* PC5 门加热解冻输出使能。 */
 
 /* 本机遥测 YC：门和停机坪状态编码。 */
 #define IEC104_IOA_YC_DOOR_STATE    0x000100UL /* 门状态码。 */
 #define IEC104_IOA_YC_HELIPED_STATE 0x000101UL /* 停机坪状态码。 */
 
-/* 本机遥控 YK：门、停机坪和内部照明的开关命令。 */
+/* 遥控 YK：门、停机坪、空调、内部照明和门加热解冻命令。 */
 #define IEC104_IOA_YK_DOOR_OPEN       0x000200UL /* 门打开。 */
 #define IEC104_IOA_YK_DOOR_CLOSE      0x000201UL /* 门关闭。 */
 #define IEC104_IOA_YK_HELIPED_EXTEND  0x000210UL /* 停机坪伸出。 */
@@ -45,6 +39,8 @@
 #define IEC104_IOA_YK_485_AC_POWER_OFF 0x000221UL /* 空调关机。 */
 #define IEC104_IOA_YK_INTERIOR_LIGHT_ON   0x000222UL /* 打开 PC4 内部照明。 */
 #define IEC104_IOA_YK_INTERIOR_LIGHT_OFF  0x000223UL /* 关闭 PC4 内部照明。 */
+#define IEC104_IOA_YK_DOOR_HEATER_ENABLE  0x000224UL /* 使能 PC5 门加热解冻。 */
+#define IEC104_IOA_YK_DOOR_HEATER_DISABLE 0x000225UL /* 关闭 PC5 门加热输出。 */
 
 /* RS-485 子设备遥信 YX。 */
 #define IEC104_IOA_YX_485_TH_ONLINE    0x001000UL /* 温湿度传感器在线。 */
@@ -107,8 +103,8 @@
 
 /* 一次采集保存所有业务模块数据，保证同一总召唤中的遥信和遥测来自同批快照。 */
 typedef struct {
-    module_moto_run_status_t motor;
-    light_output_status_t lights;
+    motor_control_status_t motor;
+    aux_output_status_t outputs;
     uint8_t ws2812_effect_active;
     xm7828_th_data_t th;
     xm8189_wind_data_t wind;
@@ -125,14 +121,14 @@ static uint16_t iec104_u16_read(const uint8_t *data)
 static void iec104_app_snapshot_read(iec104_app_snapshot_t *snapshot)
 {
     memset(snapshot, 0, sizeof(*snapshot));
-    module_moto_sync_get_run_status(&snapshot->motor);
-    light_output_get_status(&snapshot->lights);
+    motor_control_get_status(&snapshot->motor);
+    aux_output_get_status(&snapshot->outputs);
     snapshot->ws2812_effect_active = module_ws2812_effect_is_active();
-    (void)tf_modbus_xm7828_get(&snapshot->th);
-    (void)tf_modbus_xm8189_get(&snapshot->wind);
-    (void)tf_modbus_xm8537_get(&snapshot->water);
-    (void)tf_modbus_xm9505_get(&snapshot->rain);
-    (void)tf_modbus_ac_get(&snapshot->ac);
+    (void)modbus_xm7828_get(&snapshot->th);
+    (void)modbus_xm8189_get(&snapshot->wind);
+    (void)modbus_xm8537_get(&snapshot->water);
+    (void)modbus_xm9505_get(&snapshot->rain);
+    (void)modbus_ac_get(&snapshot->ac);
 }
 
 static uint8_t iec104_status_quality(uint8_t online, uint8_t sensor_fault)
@@ -149,40 +145,30 @@ static uint8_t iec104_status_quality(uint8_t online, uint8_t sensor_fault)
     return 0U;
 }
 
-static uint8_t iec104_door_state_code(const module_moto_run_status_t *run_status)
+static uint8_t iec104_door_state_code(const motor_control_status_t *run_status)
 {
     /* 工程约定：0 未知/中间，1 打开方向，2 关闭方向，3 故障。 */
-    if (run_status->door == MODULE_MOTO_DOOR_STATE_FAULT) {
+    if (run_status->door_fault != MOTOR_FAULT_NONE) {
         return 3U;
     }
-    if ((run_status->door == MODULE_MOTO_DOOR_STATE_OPENED) ||
-        (module_moto_get_direction(DOOR1_MOTOR_ID) == MODULE_MOTO_DIR_BACKWARD) ||
-        (module_moto_get_direction(DOOR2_MOTOR_ID) == MODULE_MOTO_DIR_BACKWARD)) {
-        return 1U;
-    }
-    if ((run_status->door == MODULE_MOTO_DOOR_STATE_CLOSED) ||
-        (module_moto_get_direction(DOOR1_MOTOR_ID) == MODULE_MOTO_DIR_FORWARD) ||
-        (module_moto_get_direction(DOOR2_MOTOR_ID) == MODULE_MOTO_DIR_FORWARD)) {
-        return 2U;
-    }
+    if (run_status->door_action == MOTOR_DOOR_OPENING) return 1U;
+    if (run_status->door_action == MOTOR_DOOR_CLOSING) return 2U;
+    if (run_status->door_position == MOTOR_DOOR_OPENED) return 1U;
+    if (run_status->door_position == MOTOR_DOOR_CLOSED) return 2U;
 
     return 0U;
 }
 
-static uint8_t iec104_platform_state_code(const module_moto_run_status_t *run_status)
+static uint8_t iec104_platform_state_code(const motor_control_status_t *run_status)
 {
     /* 工程约定：0 未知/中间，1 伸出方向，2 收回方向，3 故障。 */
-    if (run_status->platform == MODULE_MOTO_PLATFORM_STATE_FAULT) {
+    if (run_status->platform_fault != MOTOR_FAULT_NONE) {
         return 3U;
     }
-    if ((run_status->platform == MODULE_MOTO_PLATFORM_STATE_EXTENDED) ||
-        (module_moto_get_direction(PLATFORM_MOTOR_ID) == MODULE_MOTO_DIR_FORWARD)) {
-        return 1U;
-    }
-    if ((run_status->platform == MODULE_MOTO_PLATFORM_STATE_RETRACTED) ||
-        (module_moto_get_direction(PLATFORM_MOTOR_ID) == MODULE_MOTO_DIR_BACKWARD)) {
-        return 2U;
-    }
+    if (run_status->platform_action == MOTOR_PLATFORM_EXTENDING) return 1U;
+    if (run_status->platform_action == MOTOR_PLATFORM_RETRACTING) return 2U;
+    if (run_status->platform_position == MOTOR_PLATFORM_EXTENDED) return 1U;
+    if (run_status->platform_position == MOTOR_PLATFORM_RETRACTED) return 2U;
 
     return 0U;
 }
@@ -191,16 +177,14 @@ static uint8_t iec104_ac_has_fault(const ac_device_t *ac)
 {
     const ac_status_t *status = &ac->run_status;
 
-    return ac->status.sensor_fault || status->humidity_high_alarm ||
-           status->condenser_high_pressure_alarm ||
-           status->evaporator_freeze_alarm || status->cooling_alarm ||
-           status->high_temp_alarm || status->low_temp_alarm;
+    return ac->status.sensor_fault || status->humidity_high_alarm || status->condenser_high_pressure_alarm ||
+        status->evaporator_freeze_alarm || status->cooling_alarm || status->high_temp_alarm || status->low_temp_alarm;
 }
 
 static void iec104_app_fill_status_points(const iec104_app_snapshot_t *snapshot, iec104_status_point_t *points)
 {
-    const module_moto_run_status_t *run_status = &snapshot->motor;
-    const light_output_status_t *lights = &snapshot->lights;
+    const motor_control_status_t *run_status = &snapshot->motor;
+    const aux_output_status_t *outputs = &snapshot->outputs;
     const xm7828_th_data_t *th = &snapshot->th;
     const xm8189_wind_data_t *wind = &snapshot->wind;
     const xm8537_water_data_t *water = &snapshot->water;
@@ -211,20 +195,20 @@ static void iec104_app_fill_status_points(const iec104_app_snapshot_t *snapshot,
     uint8_t water_quality = iec104_status_quality(water->status.online, 0U);
     uint8_t rain_quality = iec104_status_quality(rain->status.online, 0U);
     uint8_t ac_quality = iec104_status_quality(ac->status.online, 0U);
-    uint8_t door_running = (run_status->door == MODULE_MOTO_DOOR_STATE_INTERMEDIATE);
-    uint8_t platform_running = (run_status->platform == MODULE_MOTO_PLATFORM_STATE_INTERMEDIATE);
+    uint8_t door_running = run_status->door_action != MOTOR_DOOR_STOPPED;
+    uint8_t platform_running = run_status->platform_action != MOTOR_PLATFORM_STOPPED;
 
-    points[0] = (iec104_status_point_t){ IEC104_IOA_YX_DOOR_OPENED, (run_status->door == MODULE_MOTO_DOOR_STATE_OPENED), 0U };
-    points[1] = (iec104_status_point_t){ IEC104_IOA_YX_DOOR_CLOSED, (run_status->door == MODULE_MOTO_DOOR_STATE_CLOSED), 0U };
-    points[2] = (iec104_status_point_t){ IEC104_IOA_YX_HELIPED_EXTENDED, (run_status->platform == MODULE_MOTO_PLATFORM_STATE_EXTENDED), 0U };
-    points[3] = (iec104_status_point_t){ IEC104_IOA_YX_HELIPED_RETRACTED, (run_status->platform == MODULE_MOTO_PLATFORM_STATE_RETRACTED), 0U };
-    points[4] = (iec104_status_point_t){ IEC104_IOA_YX_EM_STOP, tf_key_is_pressed_now(TF_KEY_ID_EM_STOP), 0U };
+    points[0] = (iec104_status_point_t){ IEC104_IOA_YX_DOOR_OPENED, (run_status->door_position == MOTOR_DOOR_OPENED && !door_running && !run_status->door_fault), 0U };
+    points[1] = (iec104_status_point_t){ IEC104_IOA_YX_DOOR_CLOSED, (run_status->door_position == MOTOR_DOOR_CLOSED && !door_running && !run_status->door_fault), 0U };
+    points[2] = (iec104_status_point_t){ IEC104_IOA_YX_HELIPED_EXTENDED, (run_status->platform_position == MOTOR_PLATFORM_EXTENDED && !platform_running && !run_status->platform_fault), 0U };
+    points[3] = (iec104_status_point_t){ IEC104_IOA_YX_HELIPED_RETRACTED, (run_status->platform_position == MOTOR_PLATFORM_RETRACTED && !platform_running && !run_status->platform_fault), 0U };
+    points[4] = (iec104_status_point_t){ IEC104_IOA_YX_EM_STOP, key_is_pressed_now(KEY_ID_EM_STOP), 0U };
     points[5] = (iec104_status_point_t){ IEC104_IOA_YX_DOOR_RUNNING, door_running, 0U };
     points[6] = (iec104_status_point_t){ IEC104_IOA_YX_HELIPED_RUNNING, platform_running, 0U };
     points[7] = (iec104_status_point_t){ IEC104_IOA_YX_WS2812_EFFECT_ACTIVE, snapshot->ws2812_effect_active, 0U };
-    points[8] = (iec104_status_point_t){ IEC104_IOA_YX_INDICATOR_LIGHT_ON, lights->indicator_on, 0U };
-    points[9] = (iec104_status_point_t){ IEC104_IOA_YX_INTERIOR_LIGHT_ON, lights->interior_light_on, 0U };
-    points[10] = (iec104_status_point_t){ IEC104_IOA_YX_DECORATIVE_LIGHT_ON, lights->decorative_light_on, 0U };
+    points[8] = (iec104_status_point_t){ IEC104_IOA_YX_INDICATOR_LIGHT_ON, outputs->indicator_enabled, 0U };
+    points[9] = (iec104_status_point_t){ IEC104_IOA_YX_INTERIOR_LIGHT_ON, outputs->interior_light_enabled, 0U };
+    points[10] = (iec104_status_point_t){ IEC104_IOA_YX_DOOR_HEATER_ENABLED, outputs->door_heater_enabled, 0U };
 
     points[11] = (iec104_status_point_t){ IEC104_IOA_YX_485_TH_ONLINE, th->status.online, th_quality };
     points[12] = (iec104_status_point_t){ IEC104_IOA_YX_485_TH_FAULT, th->status.sensor_fault, th_quality };
@@ -233,7 +217,8 @@ static void iec104_app_fill_status_points(const iec104_app_snapshot_t *snapshot,
     points[14] = (iec104_status_point_t){ IEC104_IOA_YX_485_WIND_FAULT, wind->status.sensor_fault, wind_quality };
 
     points[15] = (iec104_status_point_t){ IEC104_IOA_YX_485_WATER_ONLINE, water->status.online, water_quality };
-    points[16] = (iec104_status_point_t){ IEC104_IOA_YX_485_WATER_ALARM, water->water_detected, water_quality };
+    points[16] = (iec104_status_point_t){ IEC104_IOA_YX_485_WATER_ALARM, water->water_detected,
+        iec104_status_quality(water->status.online, water->status.sensor_fault) };
 
     points[17] = (iec104_status_point_t){ IEC104_IOA_YX_485_RAIN_ONLINE, rain->status.online, rain_quality };
     points[18] = (iec104_status_point_t){ IEC104_IOA_YX_485_RAIN_FAULT, rain->status.sensor_fault, rain_quality };
@@ -253,6 +238,8 @@ static void iec104_app_fill_status_points(const iec104_app_snapshot_t *snapshot,
     points[31] = (iec104_status_point_t){ IEC104_IOA_YX_485_AC_EVAPORATOR_SENSOR_FAULT, ac->run_status.evaporator_sensor_fault, ac_quality };
     points[32] = (iec104_status_point_t){ IEC104_IOA_YX_485_AC_CONDENSER_SENSOR_FAULT, ac->run_status.condenser_sensor_fault, ac_quality };
     points[33] = (iec104_status_point_t){ IEC104_IOA_YX_485_AC_HUMIDITY_SENSOR_FAULT, ac->run_status.humidity_sensor_fault, ac_quality };
+    points[34] = (iec104_status_point_t){ IEC104_IOA_YX_DOOR_LIMIT_FAULT, ((run_status->door_fault & MOTOR_FAULT_LIMIT_CONFLICT) != 0), 0U };
+    points[35] = (iec104_status_point_t){ IEC104_IOA_YX_PLATFORM_LIMIT_FAULT, ((run_status->platform_fault & MOTOR_FAULT_LIMIT_CONFLICT) != 0), 0U };
 }
 
 static void iec104_app_fill_measure_points(const iec104_app_snapshot_t *snapshot, iec104_measure_point_t *points)
@@ -395,10 +382,8 @@ static void iec104_app_ac_power_set(uint8_t on)
     ac_device_t ac;
 
     memset(&ac, 0, sizeof(ac));
-    if (tf_modbus_ac_get(&ac)) {
-        (void)tf_modbus_ac_write_status(ac.slave_addr,
-                                        AC_STATUS_POWER_MONITOR,
-                                        on != 0U);
+    if (modbus_ac_get(&ac)) {
+        (void)modbus_ac_queue_write_status(ac.slave_addr, AC_STATUS_POWER_MONITOR, on != 0U);
     }
 }
 
@@ -413,14 +398,16 @@ static void iec104_app_ac_power_off(void)
 }
 
 static const iec104_command_desc_t iec104_command_table[] = {
-    { IEC104_IOA_YK_DOOR_OPEN,       module_moto_business_request_door_open },
-    { IEC104_IOA_YK_DOOR_CLOSE,      module_moto_business_request_door_close },
-    { IEC104_IOA_YK_HELIPED_EXTEND,  module_moto_business_request_platform_extend },
-    { IEC104_IOA_YK_HELIPED_RETRACT, module_moto_business_request_platform_retract },
+    { IEC104_IOA_YK_DOOR_OPEN,       motor_control_request_door_open },
+    { IEC104_IOA_YK_DOOR_CLOSE,      motor_control_request_door_close },
+    { IEC104_IOA_YK_HELIPED_EXTEND,  motor_control_request_platform_extend },
+    { IEC104_IOA_YK_HELIPED_RETRACT, motor_control_request_platform_retract },
     { IEC104_IOA_YK_485_AC_POWER_ON,  iec104_app_ac_power_on },
     { IEC104_IOA_YK_485_AC_POWER_OFF, iec104_app_ac_power_off },
-    { IEC104_IOA_YK_INTERIOR_LIGHT_ON,   light_output_set_interior_light_on },
-    { IEC104_IOA_YK_INTERIOR_LIGHT_OFF,  light_output_set_interior_light_off },
+    { IEC104_IOA_YK_INTERIOR_LIGHT_ON,   aux_output_enable_interior_light },
+    { IEC104_IOA_YK_INTERIOR_LIGHT_OFF,  aux_output_disable_interior_light },
+    { IEC104_IOA_YK_DOOR_HEATER_ENABLE,  aux_output_enable_door_heater },
+    { IEC104_IOA_YK_DOOR_HEATER_DISABLE, aux_output_disable_door_heater },
 };
 
 #define IEC104_COMMAND_TABLE_COUNT \
@@ -534,12 +521,10 @@ static uint8_t iec104_app_tuning_target(uint32_t ioa)
 
 static uint8_t iec104_app_is_sensor_calibration(uint32_t ioa)
 {
-    return (ioa >= IEC104_IOA_YT_485_TH_TEMP_CALIBRATION) &&
-           (ioa <= IEC104_IOA_YT_485_WIND_DIRECTION_CALIBRATION);
+    return (ioa >= IEC104_IOA_YT_485_TH_TEMP_CALIBRATION) && (ioa <= IEC104_IOA_YT_485_WIND_DIRECTION_CALIBRATION);
 }
 
-static uint8_t iec104_app_tuning_value_is_valid(uint32_t ioa,
-                                                 int16_t value)
+static uint8_t iec104_app_tuning_value_is_valid(uint32_t ioa, int16_t value)
 {
     switch (ioa) {
     case IEC104_IOA_YT_485_AC_COOLING_START:
@@ -579,8 +564,7 @@ uint8_t iec104_app_tuning_value_parse(uint32_t ioa, const uint8_t *data, uint32_
     }
 
     memcpy(&float_value, data, sizeof(float_value));
-    if ((float_value != float_value) ||
-        (float_value < -3276.8F) || (float_value > 3276.7F)) {
+    if ((float_value != float_value) || (float_value < -3276.8F) || (float_value > 3276.7F)) {
         return 0U;
     }
 
@@ -602,8 +586,7 @@ uint8_t iec104_app_tuning_value_parse(uint32_t ioa, const uint8_t *data, uint32_
         if ((raw_value < -1000.0F) || (raw_value > 1000.0F)) {
             return 0U;
         }
-        integer_value = (int16_t)(raw_value +
-                                  ((raw_value >= 0.0F) ? 0.5F : -0.5F));
+        integer_value = (int16_t)(raw_value + ((raw_value >= 0.0F) ? 0.5F : -0.5F));
         error = raw_value - (float)integer_value;
         if (error < 0.0F) {
             error = -error;
@@ -639,19 +622,15 @@ uint8_t iec104_app_tuning_write(uint32_t ioa, uint16_t value)
     switch (iec104_app_tuning_target(ioa)) {
     case IEC104_TUNING_TARGET_AC:
         memset(&ac, 0, sizeof(ac));
-        return tf_modbus_ac_get(&ac) &&
-               tf_modbus_ac_write_param(ac.slave_addr, register_address,
-                                        (int16_t)value);
+        return modbus_ac_get(&ac) && modbus_ac_queue_write_param(ac.slave_addr, register_address, (int16_t)value);
 
     case IEC104_TUNING_TARGET_XM7828:
         memset(&th, 0, sizeof(th));
-        return tf_modbus_xm7828_get(&th) &&
-               tf_modbus_xm7828_write(th.slave_addr, register_address, value);
+        return modbus_xm7828_get(&th) && modbus_xm7828_queue_write(th.slave_addr, register_address, value);
 
     case IEC104_TUNING_TARGET_XM8189:
         memset(&wind, 0, sizeof(wind));
-        return tf_modbus_xm8189_get(&wind) &&
-               tf_modbus_xm8189_write(wind.slave_addr, register_address, value);
+        return modbus_xm8189_get(&wind) && modbus_xm8189_queue_write(wind.slave_addr, register_address, value);
 
     default:
         return 0U;

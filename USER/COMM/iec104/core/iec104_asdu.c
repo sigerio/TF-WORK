@@ -1,4 +1,4 @@
-#include "iec104_asdu.h"
+#include "COMM/iec104/core/iec104_asdu.h"
 
 #include <stddef.h>
 #include <string.h>
@@ -10,8 +10,7 @@ uint16_t iec104_asdu_u16_read(const uint8_t *data)
 
 uint32_t iec104_asdu_ioa_read(const uint8_t *data)
 {
-    return (uint32_t)data[0] | ((uint32_t)data[1] << 8U) |
-           ((uint32_t)data[2] << 16U);
+    return (uint32_t)data[0] | ((uint32_t)data[1] << 8U) | ((uint32_t)data[2] << 16U);
 }
 
 void iec104_asdu_u16_write(uint8_t *data, uint16_t value)
@@ -31,10 +30,8 @@ uint8_t iec104_asdu_build(uint8_t type, uint8_t vsq, uint8_t cot, uint16_t commo
 {
     uint8_t asdu_length = IEC104_ASDU_HEADER_LENGTH + objects_length;
 
-    if ((out == NULL) ||
-        ((objects_length > 0U) && (objects == NULL)) ||
-        (objects_length > (IEC104_MAX_ASDU_LENGTH - IEC104_ASDU_HEADER_LENGTH)) ||
-        (asdu_length > out_capacity)) {
+    if ((out == NULL) || ((objects_length > 0U) && (objects == NULL)) ||
+        (objects_length > (IEC104_MAX_ASDU_LENGTH - IEC104_ASDU_HEADER_LENGTH)) || (asdu_length > out_capacity)) {
         return 0U;
     }
 

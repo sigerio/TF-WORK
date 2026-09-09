@@ -1,9 +1,9 @@
-#include "iec104_session.h"
+#include "COMM/iec104/core/iec104_session.h"
 
 #include <stddef.h>
 #include <string.h>
 
-#include "iec104_txq.h"
+#include "COMM/iec104/core/iec104_txq.h"
 
 #define IEC104_SEQUENCE_LIMIT 0x8000U
 #define IEC104_SEQUENCE_MASK  (IEC104_SEQUENCE_LIMIT - 1U)
@@ -110,8 +110,7 @@ static uint8_t iec104_send_u(iec104_u_command_e u_command)
 
 uint8_t iec104_session_send_asdu(const uint8_t *asdu, uint8_t asdu_length, uint32_t now)
 {
-    if ((session.link.data_transfer_started == 0U) ||
-        (session.send_window.unacknowledged_count >= IEC104_K)) {
+    if ((session.link.data_transfer_started == 0U) || (session.send_window.unacknowledged_count >= IEC104_K)) {
         return 0U;
     }
 
@@ -150,16 +149,14 @@ uint8_t iec104_session_data_transfer_started(void)
 static void iec104_handle_i_frame(const iec104_frame_t *frame, uint32_t now)
 {
     /* I 帧同时确认本端发送窗口；对端 N(S) 必须与当前期望值严格连续。 */
-    if (!iec104_received_acknowledges(frame->receive_sequence) ||
-        (frame->send_sequence != session.receive_ack.expected_sequence)) {
+    if (!iec104_received_acknowledges(frame->receive_sequence) || (frame->send_sequence != session.receive_ack.expected_sequence)) {
         return;
     }
 
     session.receive_ack.expected_sequence = (uint16_t)((session.receive_ack.expected_sequence + 1U) & IEC104_SEQUENCE_MASK);
     session.receive_ack.pending_count++;
 
-    if ((session.link.data_transfer_started != 0U) &&
-        (session.callbacks.on_asdu != NULL)) {
+    if ((session.link.data_transfer_started != 0U) && (session.callbacks.on_asdu != NULL)) {
         session.callbacks.on_asdu(frame, now);
     }
 
@@ -230,22 +227,19 @@ void iec104_session_handle_frame(const iec104_frame_t *frame, uint32_t now)
 void iec104_session_service_timers(uint32_t now)
 {
     /* T2：数据传输期间定期发送 S 帧，上报最新 N(R)。 */
-    if ((session.link.data_transfer_started != 0U) &&
-        ((now - session.link.last_s_frame_tick) >= IEC104_T2_MS)) {
+    if ((session.link.data_transfer_started != 0U) && ((now - session.link.last_s_frame_tick) >= IEC104_T2_MS)) {
         (void)iec104_send_s_ack(now);
     }
 
     /* T1：测试确认超时后结束本轮等待，允许后续 T3 再次发起链路测试。 */
-    if ((session.link.test_frame_pending != 0U) &&
-        ((now - session.link.test_frame_tick) >= IEC104_T1_MS)) {
+    if ((session.link.test_frame_pending != 0U) && ((now - session.link.test_frame_tick) >= IEC104_T1_MS)) {
         session.link.test_frame_pending = 0U;
         iec104_activity_record(now);
     }
 
     /* T3：链路空闲且没有待确认测试帧时发送 TESTFR ACT。 */
     if ((session.link.test_frame_pending == 0U) &&
-        ((now - session.link.last_activity_tick) >= IEC104_T3_MS) &&
-        iec104_send_u(IEC104_U_TESTFR_ACT)) {
+        ((now - session.link.last_activity_tick) >= IEC104_T3_MS) && iec104_send_u(IEC104_U_TESTFR_ACT)) {
         session.link.test_frame_pending = 1U;
         session.link.test_frame_tick = now;
         iec104_activity_record(now);

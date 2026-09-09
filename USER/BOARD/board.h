@@ -2,6 +2,7 @@
 #define BOARD_H
 
 #include <stdint.h>
+#include <stdbool.h>
 
 #include "gd32f10x_dma.h"
 #include "gd32f10x_rcu.h"
@@ -11,14 +12,17 @@
 #define BOARD_USART2_ROLE_IEC104  1U
 #define BOARD_USART2_ROLE_CHARGER 2U
 
+/* 485 方向控制经低速光耦隔离，切到发送后留出建立时间，可按实测波形调整。 */
+#ifndef BOARD_RS485_TX_SETUP_US
+#define BOARD_RS485_TX_SETUP_US 100U
+#endif
+
 /* USART2 的引脚、RXNE 中断和 TX DMA 在运行时只能由一个模块占用。 */
 #ifndef BOARD_USART2_ROLE
 #define BOARD_USART2_ROLE BOARD_USART2_ROLE_DEBUG
 #endif
 
-#if (BOARD_USART2_ROLE != BOARD_USART2_ROLE_DEBUG) && \
-    (BOARD_USART2_ROLE != BOARD_USART2_ROLE_IEC104) && \
-    (BOARD_USART2_ROLE != BOARD_USART2_ROLE_CHARGER)
+#if (BOARD_USART2_ROLE != BOARD_USART2_ROLE_DEBUG) && (BOARD_USART2_ROLE != BOARD_USART2_ROLE_IEC104) && (BOARD_USART2_ROLE != BOARD_USART2_ROLE_CHARGER)
 #error BOARD_USART2_ROLE must select DEBUG, IEC104, or CHARGER
 #endif
 
@@ -86,7 +90,7 @@ typedef enum {
     BOARD_PIN_DOOR_LOCK,         /* PB0 - 门电吸锁 */
     BOARD_PIN_LED_INDICATOR,     /* PC3 - 指示灯 */
     BOARD_PIN_LED_INTERIOR,      /* PC4 - 内部照明 */
-    BOARD_PIN_LED_STRIP_ENABLE,  /* PC5 - 独立装饰灯带 */
+    BOARD_PIN_DOOR_HEATER_ENABLE,  /* PC5 - 门加热解冻伴热带使能 */
     BOARD_PIN_COUNT,
     BOARD_PIN_NONE = -1,
 } board_pin_id_e;
@@ -219,5 +223,17 @@ extern const board_pwm_config_t board_pwm_configs[BOARD_PWM_COUNT];
 /* 便于上层按 ID 直接读写引脚电平（含 gpio_bit_read/gpio_bit_write 的参数展开） */
 #define BOARD_PIN_PORT(id)   (board_gpio_configs[id].port)
 #define BOARD_PIN_PIN(id)    (board_gpio_configs[id].pin)
+
+/* 四个光电输入的有效电平快照；冲突及到位由控制层解释。 */
+typedef struct {
+    bool platform_extended;
+    bool platform_retracted;
+    bool door_closed;
+    bool door_opened;
+} board_motor_limits_t;
+
+void board_motor_io_init(void);
+void board_motor_read_limits(board_motor_limits_t *limits);
+void board_door_lock_write(bool locked);
 
 #endif /* BOARD_H */
