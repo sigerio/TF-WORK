@@ -5,6 +5,7 @@
 
 #include "COMM/modbus/modbus_port.h"
 #include "COMM/modbus/modbus_devices.h"
+#include "COMM/modbus/devices/modbus_weather.h"
 #include "DEBUG/debug_log.h"
 
 /* 每条总线独立执行：出队发送 -> 等待响应 -> 解析或超时 -> 下一请求。 */
@@ -26,6 +27,30 @@ typedef struct {
 } modbus_master_bus_t;
 
 static modbus_master_bus_t bus_masters[MODBUS_BUS_COUNT];
+
+/* 只合并最新状态，不记录中间变位历史；发送中数据由 com_link 的 TX 缓冲独立持有。 */
+static struct {
+    uint32_t fault_value;
+    uint32_t debug_mask;
+    bool pending;
+} weather_fault;
+
+void modbus_master_queue_weather_fault(uint32_t fault_value)
+{
+    weather_fault.fault_value = fault_value;
+    weather_fault.pending = true;
+}
+
+void modbus_master_repeat_weather_fault(void)
+{
+    weather_fault.pending = true;
+}
+
+void modbus_master_set_weather_fault_debug(uint32_t fault_mask)
+{
+    weather_fault.debug_mask = fault_mask;
+    weather_fault.pending = true;
+}
 
 #ifdef DEBUG_ENABLE
 static const char *modbus_bus_name(modbus_bus_t bus)
@@ -82,6 +107,9 @@ static void modbus_log_frame(const char *direction, modbus_bus_t bus, const uint
 static void modbus_reset_runtime(void)
 {
     modbus_txq_reset();
+    weather_fault.fault_value = 0U;
+    weather_fault.debug_mask = 0U;
+    weather_fault.pending = false;
     for (uint32_t bus = 0U; bus < (uint32_t)MODBUS_BUS_COUNT; bus++) {
         modbus_master_bus_t *master = &bus_masters[bus];
 
@@ -353,6 +381,22 @@ static bool modbus_send_next(modbus_bus_t bus)
 
     if (com_link_tx_busy(link) || (tx_buf == NULL)) {
         return false;
+    }
+
+    if (bus == MODBUS_BUS_WEATHER && weather_fault.pending) {
+        frame_len = (uint16_t)modbus_weather_build_fault_notification(MODULE_MODBUS_WEATHER_ADDR,
+            weather_fault.fault_value | weather_fault.debug_mask, tx_buf, MODULE_MODBUS_TX_BUF_SIZE);
+        if (frame_len == 0U) return false;
+        com_link_rx_clear(link);
+        if (!com_link_tx_start(link, frame_len)) {
+            MODBUS_DIAG_INC(bus, frame_error_count);
+            return false; /* 保留待发状态，下次空闲重试，不消费普通请求。 */
+        }
+        weather_fault.pending = false;
+        MODBUS_DIAG_INC(bus, request_count);
+        modbus_log_frame("TX", bus, tx_buf, frame_len);
+        /* 不进入 WAIT_RSP；tx_busy 在 DMA 和 USART 实际发送完成、方向恢复后才解除。 */
+        return true;
     }
 
     if (!modbus_txq_pop(bus, tx_buf, MODULE_MODBUS_TX_BUF_SIZE, &frame_len, &expect)) {

@@ -40,8 +40,14 @@ typedef struct {
 
 /* 初始化两条 RS-485 总线、接收 FIFO 和 Modbus 发送队列。 */
 bool modbus_master_init(void);
-/* 快周期收发任务：发送队头请求、接收响应并驱动超时处理。 */
+/* 快周期收发任务：气象总线空闲时先发 B4 优先槽，再取普通请求；接收响应并驱动超时处理。 */
 void modbus_master_task(void);
+/* 主循环内调用：覆盖 B4 最新待发状态；不占普通队列、不操作正在发送的 DMA 缓冲。 */
+void modbus_master_queue_weather_fault(uint32_t fault_value);
+/* 轮询补发最新状态，与变位发送共用一个优先槽。 */
+void modbus_master_repeat_weather_fault(void);
+/* 调试模拟位仅叠加到 B4 报文；0 退出模拟并立即请求发送真实状态。 */
+void modbus_master_set_weather_fault_debug(uint32_t fault_mask);
 #if MODULE_MODBUS_ENABLE_DIAG
 void modbus_get_diag(modbus_diag_t *diag);
 void modbus_clear_diag(void);

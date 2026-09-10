@@ -3,6 +3,7 @@
 #include <string.h>
 
 #include "APP/app_status.h"
+#include "COMM/modbus/modbus_master.h"
 
 /** @brief 设备数据缓存（所有从机的上次成功解析数据） */
 typedef struct {
@@ -32,6 +33,7 @@ typedef enum {
     MODBUS_QUERY_AC_HUMIDITY,
     MODBUS_QUERY_AC_CONTROL,
     MODBUS_QUERY_AC_STATUS,
+    MODBUS_QUERY_WEATHER_FAULT,
     MODBUS_QUERY_STEP_COUNT,
 } modbus_poll_step_e;
 
@@ -48,7 +50,7 @@ typedef struct {
 
 static uint32_t poll_step;
 
-static const modbus_poll_entry_t poll_plan[MODBUS_QUERY_STEP_COUNT] = {
+static const modbus_poll_entry_t poll_plan[MODBUS_QUERY_WEATHER_FAULT] = {
     [MODBUS_QUERY_XM7828] = { modbus_xm7828_build_read_request, &device_cache.xm7828.slave_addr,
         XUNCHIP_REG_DATA0, XM7828_MEASUREMENT_REG_COUNT, MODBUS_BUS_WEATHER, MODBUS_DEV_XM7828_TH, },
     [MODBUS_QUERY_XM8189] = { modbus_xm8189_build_read_request, &device_cache.xm8189.slave_addr,
@@ -234,6 +236,11 @@ void modbus_devices_poll(void)
 
     if (poll_step >= MODBUS_QUERY_STEP_COUNT) {
         poll_step = 0U;
+    }
+    if (poll_step == MODBUS_QUERY_WEATHER_FAULT) {
+        poll_step = 0U;
+        modbus_master_repeat_weather_fault();
+        return;
     }
     entry = &poll_plan[poll_step];
     poll_step = (poll_step + 1U) % MODBUS_QUERY_STEP_COUNT;

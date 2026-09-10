@@ -31,7 +31,7 @@ static uint8_t water_report_siq;
 static uint8_t command_response_cot;
 
 bool key_is_pressed_now(key_id_t key) { return false; }
-uint8_t module_ws2812_effect_is_active(void) { return 0; }
+uint8_t ws2812_app_is_active(void) { return 0; }
 bool modbus_ac_get(ac_device_t *out) { return false; }
 bool modbus_xm7828_get(xm7828_th_data_t *out) { return false; }
 bool modbus_xm8189_get(xm8189_wind_data_t *out) { return false; }

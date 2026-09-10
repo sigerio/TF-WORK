@@ -67,7 +67,7 @@ typedef union
         uint8_t ac: 1;
         uint8_t weth: 1;
         uint8_t iec: 1;
-        uint8_t wse: 3; /* 0=业务灯效，1~6=ws2812_debug_effect_e */
+        uint8_t wse: 3; /* 0=退出调试，1=急停常亮，2=限位双闪，3=水浸交替 */
         uint8_t dor: 1;
         uint8_t hei: 1;
     }bits;

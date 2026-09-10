@@ -5,7 +5,7 @@
 #include "OS/os.h"
 #include "CONTROL/key/key_event.h"
 #include "CONTROL/motor/motor_control.h"
-#include "CONTROL/ws2812/ws2812_status.h"
+#include "APP/ws2812_app.h"
 #include "DEBUG/debug_log.h"
 
 
@@ -115,7 +115,7 @@ static void usr_door_state_event_cb(void *arg)
         return;
     }
 
-    set_door_running_in(*running);
+    ws2812_app_set_door_state(*running);
 }
 
 static void usr_platform_state_event_cb(void *arg)
@@ -126,7 +126,7 @@ static void usr_platform_state_event_cb(void *arg)
         return;
     }
 
-    set_platform_running_in(*running);
+    ws2812_app_set_platform_state(*running);
 }
 
 

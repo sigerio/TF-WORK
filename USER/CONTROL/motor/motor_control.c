@@ -4,7 +4,7 @@
 #include "OS/os.h"
 #include "APP/app_status.h"
 #include "APP/app_events.h"
-#include "CONTROL/ws2812/ws2812_status.h"
+#include "APP/ws2812_app.h"
 
 #define MOTOR_REVERSE_WAIT_MS 100U
 

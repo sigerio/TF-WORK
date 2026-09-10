@@ -14,7 +14,7 @@
 #include "gd32f10x_rcu.h"
 #include "gd32f10x_usart.h"
 #include "COMMON/ringbuf.h"
-#include "CONTROL/ws2812/ws2812_status.h"
+#include "APP/ws2812_app.h"
 
 /*
  * 调试打印口 — 与指定通信口复用，由宏选择。
@@ -305,11 +305,11 @@ static bool debug_console_apply_command(const char *command)
     else if (strncmp(command, "WSE:", 4U) == 0)
     {
         value_text = &command[4];
-        if (!debug_console_parse_value(value_text, WS2812_DEBUG_WARP_CHARGE, &value))
+        if (!debug_console_parse_value(value_text, WS2812_DEBUG_WATER, &value))
         {
             return false;
         }
-        return module_ws2812_debug_select((ws2812_debug_effect_e)value);
+        return ws2812_app_select_debug((ws2812_debug_effect_e)value);
     }
     else if (strncmp(command, "DOR:", 4U) == 0)
     {

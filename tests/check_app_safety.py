@@ -25,19 +25,31 @@ with tempfile.TemporaryDirectory(prefix="xj_app_safety_") as directory:
     # Vendor Ethernet headers declare static functions; hardware stubs intentionally ignore unused parameters.
     host = ["cc", "-std=c99", "-Wall", "-Wextra", "-Werror", "-Wno-unused-parameter", "-Wno-unused-function",
             "-DGD32F10X_HD", "-ICMSIS", "-ICore", "-IGD32F10X/Include", "-IUSER"]
+    fault_binary = str(Path(directory) / "test_app_fault")
+    run(host + ["tests/test_app_fault.c", "USER/APP/app_fault.c", "-o", fault_binary])
+    run([fault_binary])
     link_binary = str(Path(directory) / "test_link_tx")
     run(host + ["-Wno-pointer-to-int-cast", "-Wno-int-to-pointer-cast", "-ffunction-sections", "-fdata-sections", "-Wl,--gc-sections",
         "tests/test_link_tx.c", "USER/BOARD/board.c", "-o", link_binary])
     run([link_binary])
     ws2812_binary = str(Path(directory) / "test_ws2812_debug")
     run(host + ["-Wno-pointer-to-int-cast", "-Wno-sign-compare", "-ffunction-sections", "-fdata-sections", "-Wl,--gc-sections",
-                "tests/test_ws2812_debug.c", "USER/CONTROL/ws2812/ws2812_status.c", "USER/CONTROL/ws2812/ws2812_effect.c",
+                "tests/test_ws2812_debug.c", "USER/APP/ws2812_app.c", "USER/CONTROL/ws2812/effects/ws2812_basic.c",
+                "USER/CONTROL/ws2812/effects/ws2812_mechanical.c", "USER/CONTROL/ws2812/ws2812_frame.c",
                 "USER/COMMON/ringbuf.c", "-o", ws2812_binary])
     run([ws2812_binary])
     encoding_binary = str(Path(directory) / "test_ws2812_encoding")
     run(host + ["-Wno-pointer-to-int-cast", "-ffunction-sections", "-fdata-sections", "-Wl,--gc-sections",
-                "tests/test_ws2812_encoding.c", "USER/CONTROL/ws2812/ws2812_driver.c", "-o", encoding_binary])
+                "tests/test_ws2812_encoding.c", "USER/CONTROL/ws2812/driver/ws2812_driver.c", "-o", encoding_binary])
     run([encoding_binary])
+    transfer_binary = str(Path(directory) / "test_ws2812_transfer")
+    run(host + ["-Wno-pointer-to-int-cast", "-ffunction-sections", "-fdata-sections", "-Wl,--gc-sections",
+                "tests/test_ws2812_transfer.c", "-o", transfer_binary])
+    run([transfer_binary])
+    # The library must compile without MCU headers, board configuration or DEBUG_ENABLE.
+    run(["cc", "-std=c99", "-Wall", "-Wextra", "-Werror", "-fsyntax-only", "-IUSER",
+         "USER/CONTROL/ws2812/ws2812_frame.c", "USER/CONTROL/ws2812/effects/ws2812_basic.c",
+         "USER/CONTROL/ws2812/effects/ws2812_mechanical.c"])
     modbus_sources = ["tests/test_modbus.c", "USER/COMM/modbus/modbus_master.c", "USER/COMM/modbus/modbus_devices.c",
                       "USER/COMM/modbus/modbus_txq.c", "USER/COMM/modbus/modbus_rtu.c", "USER/COMMON/ringbuf.c",
                       "USER/COMMON/circular_index.c", "USER/APP/app_status.c"]
@@ -75,4 +87,4 @@ with tempfile.TemporaryDirectory(prefix="xj_debug_link_") as directory:
     for role in (1, 2):
         run([option for option in arm if option != "-fsyntax-only"] + [f"-DBOARD_USART2_ROLE={role}",
             "-nostdlib", "-Wl,-e,main", str(source), "USER/DEBUG/debug_console.c", "-o", str(Path(directory) / "debug.elf")])
-print("PASS: WS2812 effect library/debug/BRG encoding, Modbus layers/timing, RS485 TX setup, optical limits and motor stop/status, estop, key/LED tasks, USART2 roles, disabled-debug linking and pool boundaries")
+print("PASS: fault collection/priorities/recovery, WS2812 effect library/debug/BRG encoding, Modbus layers/timing, RS485 TX setup, optical limits and motor stop/status, estop, key/LED tasks, USART2 roles, disabled-debug linking and pool boundaries")

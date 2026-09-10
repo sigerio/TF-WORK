@@ -2,7 +2,7 @@
 #include <stdint.h>
 #include <string.h>
 
-#include "CONTROL/ws2812/ws2812_driver.h"
+#include "CONTROL/ws2812/driver/ws2812_driver.h"
 
 int main(void)
 {
@@ -17,7 +17,7 @@ int main(void)
 
     for (unsigned index = 0; index < sizeof(cases) / sizeof(cases[0]); index++) {
         memset(frame, 0xA5, sizeof(frame));
-        ws2812_frame_set_rgb(frame, 1U, cases[index][0], cases[index][1], cases[index][2]);
+        ws2812_driver_encode_pixel(frame, 1U, cases[index][0], cases[index][1], cases[index][2]);
         for (unsigned bit = 0; bit < WS2812_ENCODED_BYTES_PER_LED; bit++) {
             uint8_t expected = (cases[index][3U + bit / 8U] & (0x80U >> (bit % 8U))) ? 0xF0U : 0xC0U;
 

@@ -6,14 +6,17 @@
 #include "COMM/modbus/modbus_master.h"
 #include "COMM/modbus/modbus_devices.h"
 #include "COMM/modbus/modbus_port.h"
+#include "COMM/modbus/devices/modbus_weather.h"
 #include "APP/app_status.h"
 
 static com_link_resource_t resources[MODBUS_BUS_COUNT];
 static ringbuf_t receive_fifo[MODBUS_BUS_COUNT];
 static uint8_t receive_bytes[MODBUS_BUS_COUNT][MODULE_MODBUS_RINGBUF_SIZE];
 static uint8_t transmit_bytes[MODBUS_BUS_COUNT][MODULE_MODBUS_TX_BUF_SIZE];
-static uint8_t sent_frames[32][MODBUS_RTU_REQUEST_LEN];
+static uint8_t sent_frames[32][MODBUS_WEATHER_FAULT_FRAME_LEN];
 static unsigned sent_ticks[32], sent_buses[32], sent_count, tick;
+static uint16_t sent_lengths[32];
+static bool hold_weather_tx, fail_weather_tx;
 
 bool modbus_port_open(modbus_bus_t bus, com_link_t *link)
 {
@@ -29,14 +32,20 @@ uint8_t *com_link_tx_buffer(com_link_t *link) { return link->res->tx_dma_buf; }
 bool com_link_tx_busy(const com_link_t *link) { return link->tx_busy; }
 bool com_link_tx_start(com_link_t *link, uint16_t len)
 {
-    assert(sent_count < 32 && len == MODBUS_RTU_REQUEST_LEN);
+    if (link->res == &resources[MODBUS_BUS_WEATHER] && fail_weather_tx) return false;
+    assert(!link->tx_busy);
+    assert(sent_count < 32 && (len == MODBUS_RTU_REQUEST_LEN || len == MODBUS_WEATHER_FAULT_FRAME_LEN));
     memcpy(sent_frames[sent_count], link->res->tx_dma_buf, len);
+    sent_lengths[sent_count] = len;
     sent_buses[sent_count] = (unsigned)(link->res - resources);
     sent_ticks[sent_count++] = tick;
     link->tx_busy = true;
     return true;
 }
-void com_link_tx_service(com_link_t *link) { link->tx_busy = false; }
+void com_link_tx_service(com_link_t *link)
+{
+    if (link->res != &resources[MODBUS_BUS_WEATHER] || !hold_weather_tx) link->tx_busy = false;
+}
 uint16_t com_link_rx_available(com_link_t *link) { return ringbuf_available(link->res->rx_fifo); }
 uint16_t com_link_rx_peek(com_link_t *link, uint8_t *data, uint16_t len) { return ringbuf_peek(link->res->rx_fifo, data, len); }
 uint16_t com_link_rx_drop(com_link_t *link, uint16_t len) { return ringbuf_drop(link->res->rx_fifo, len); }
@@ -46,6 +55,7 @@ static void setup(void)
 {
     assert(modbus_master_init());
     tick = sent_count = 0;
+    hold_weather_tx = fail_weather_tx = false;
 }
 static void step(void) { tick++; modbus_master_task(); }
 static void inject(modbus_bus_t bus, const uint8_t *frame, uint16_t len)
@@ -85,8 +95,16 @@ static void check_poll_plan(void)
     modbus_rsp_expect_t expect;
 
     setup();
-    for (unsigned n = 0; n < 20; n++) {
-        unsigned i = n % 10;
+    for (unsigned n = 0; n < 22; n++) {
+        unsigned i = n % 11;
+        if (i == 10) {
+            modbus_devices_poll();
+            assert(modbus_txq_count() == 0);
+            unsigned before = sent_count;
+            step();
+            assert(sent_count == before + 1 && sent_frames[before][0] == 0xB4);
+            continue;
+        }
         modbus_bus_t bus = (i < 6) ? MODBUS_BUS_WEATHER : MODBUS_BUS_AC;
         uint8_t function = (i == 9) ? 1 : 3;
         uint16_t base = (i < 6) ? 0 : ((i == 9) ? AC_STATUS_READ_BASE_REF : AC_PARAM_READ_BASE_REF);
@@ -228,12 +246,142 @@ static void check_protocol_builders(void)
     assert(modbus_ac_build_read_status_request(1, AC_STATUS_READ_BASE_REF - 1, 1, frame, 8) == 0);
 }
 
+static void assert_weather_fault(unsigned index, uint32_t value)
+{
+    assert(sent_buses[index] == MODBUS_BUS_WEATHER && sent_lengths[index] == 9U);
+    assert(sent_frames[index][0] == 0xB4 && sent_frames[index][1] == 0x41 && sent_frames[index][2] == 4U);
+    for (unsigned i = 0; i < 4; i++) assert(sent_frames[index][3 + i] == (uint8_t)(value >> (i * 8)));
+    assert(modbus_rtu_check_crc(sent_frames[index], 9));
+}
+
+static void check_weather_fault_priority(void)
+{
+    uint8_t response[256];
+    uint8_t frame[10];
+    const uint8_t prefix[] = {0xB4, 0x41, 0x04, 0x78, 0x56, 0x34, 0x12};
+    memset(frame, 0xA5, sizeof(frame));
+    assert(modbus_weather_build_fault_notification(0xB4, 0x12345678, frame, sizeof(frame)) == 9);
+    assert(memcmp(frame, prefix, sizeof(prefix)) == 0 && frame[9] == 0xA5);
+    assert(frame[7] == 0x7F && frame[8] == 0xA7); /* Independent known CRC vector. */
+    assert(modbus_rtu_check_crc(frame, 9));
+    assert(modbus_weather_build_fault_notification(0, 0, frame, sizeof(frame)) == 0);
+    assert(modbus_weather_build_fault_notification(248, 0, frame, sizeof(frame)) == 0);
+    assert(modbus_weather_build_fault_notification(0xB4, 0, NULL, 9) == 0);
+    assert(modbus_weather_build_fault_notification(0xB4, 0, frame, 8) == 0);
+    assert(memcmp(frame, prefix, sizeof(prefix)) == 0);
+
+    setup();
+    modbus_devices_poll();
+    modbus_devices_poll();
+    step(); /* 05 is in flight, 02 is queued. */
+    modbus_master_queue_weather_fault(1);
+    modbus_master_queue_weather_fault(0x01020304);
+    modbus_master_repeat_weather_fault();
+    assert(modbus_ac_queue_write_status(1, AC_STATUS_POWER_MONITOR, true));
+    step();
+    assert(sent_count == 2 && sent_buses[1] == MODBUS_BUS_AC); /* AC progresses, WEATHER waits. */
+    assert(modbus_txq_count() == 1);
+    uint16_t length = response_for(0, response);
+    inject(MODBUS_BUS_WEATHER, response, length);
+    hold_weather_tx = true;
+    step();
+    assert(sent_count == 3);
+    assert_weather_fault(2, 0x01020304);
+    assert(modbus_txq_count() == 1); /* B4 precedes queued 02 without removing it. */
+
+    modbus_master_queue_weather_fault(0xFFFFFFFF);
+    modbus_master_queue_weather_fault(0); /* Recovery replaces pending alarm; it cannot alter in-flight data. */
+    for (unsigned i = 0; i < 12; i++) step();
+    assert(sent_count == 3);
+    assert(memcmp(transmit_bytes[MODBUS_BUS_WEATHER], sent_frames[2], 9) == 0);
+    hold_weather_tx = false;
+    step();
+    assert_weather_fault(3, 0);
+    step();
+    assert(sent_count == 5 && sent_frames[4][0] == 2);
+    assert(sent_ticks[4] == sent_ticks[3] + 1); /* No 100 ms reply wait for B4. */
+
+    setup();
+    modbus_devices_poll();
+    modbus_master_queue_weather_fault(1);
+    fail_weather_tx = true;
+    step();
+    assert(sent_count == 0 && modbus_txq_count() == 1);
+    modbus_master_queue_weather_fault(8);
+    fail_weather_tx = false;
+    step();
+    assert_weather_fault(0, 8);
+    assert(modbus_txq_count() == 1);
+    step();
+    assert(sent_count == 2 && sent_frames[1][0] == 5);
+
+    setup();
+    modbus_master_queue_weather_fault(0x01FFFFFF);
+    step();
+    for (unsigned i = 0; i < 30; i++) step();
+    assert(sent_count == 1 && get_signal_state().byte == 0); /* No B4 online signal or timeout. */
+#if MODULE_MODBUS_ENABLE_DIAG
+    modbus_diag_t diag;
+    modbus_get_diag(&diag);
+    assert(diag.request_count == 1 && diag.timeout_count == 0 && diag.response_count == 0);
+#endif
+    /* Periodic repeat sends latest retained value, no duplicate normal-queue frame. */
+    for (unsigned i = 0; i < 11; i++) modbus_devices_poll();
+    step();
+    assert_weather_fault(1, 0x01FFFFFF);
+
+    setup();
+    for (unsigned i = 0; i < MODULE_MODBUS_SEND_QUEUE_MAX; i++) assert(modbus_xm8537_queue_write(4, XUNCHIP_REG_COMM_MODE, 1));
+    modbus_master_queue_weather_fault(2);
+    step();
+    assert_weather_fault(0, 2);
+    assert(modbus_txq_count() == MODULE_MODBUS_SEND_QUEUE_MAX); /* Dedicated slot cannot be evicted by queue fullness. */
+
+    setup();
+    modbus_devices_poll();
+    step();
+    modbus_master_queue_weather_fault(4);
+    for (unsigned i = 0; i < 9; i++) step();
+    assert(sent_count == 1);
+    step();
+    assert_weather_fault(1, 4); /* Also sends after the current sensor times out. */
+
+    setup();
+    modbus_master_queue_weather_fault(0x00014004); /* Real platform fault and offline statuses. */
+    modbus_master_set_weather_fault_debug(1);
+    step();
+    assert_weather_fault(0, 0x00014005);
+    hold_weather_tx = true;
+    modbus_master_set_weather_fault_debug(2); /* Change simulation without altering in-flight bytes. */
+    step();
+    assert(sent_count == 1 && memcmp(transmit_bytes[MODBUS_BUS_WEATHER], sent_frames[0], 9) == 0);
+    hold_weather_tx = false;
+    step();
+    assert_weather_fault(1, 0x00014006);
+    modbus_master_set_weather_fault_debug(8);
+    step();
+    assert_weather_fault(2, 0x0001400C);
+    modbus_master_repeat_weather_fault();
+    step();
+    assert_weather_fault(3, 0x0001400C); /* Periodic sync preserves the selected simulation. */
+    modbus_master_queue_weather_fault(0x00014000); /* Real recovery cannot erase the simulation. */
+    step();
+    assert_weather_fault(4, 0x00014008);
+    modbus_master_set_weather_fault_debug(0);
+    step();
+    assert_weather_fault(5, 0x00014000); /* WSE:0 restores true state, not unconditional zero. */
+    modbus_master_repeat_weather_fault();
+    step();
+    assert_weather_fault(6, 0x00014000);
+}
+
 int main(void)
 {
     check_poll_plan();
     check_transactions();
     check_writes_and_faults();
     check_protocol_builders();
-    puts("PASS: Modbus poll order, response routing, independent buses, partial RX, 150/100 ms timing, writes and water faults");
+    check_weather_fault_priority();
+    puts("PASS: B4 priority/latest-state/no-reply/DMA ownership/retry, Modbus poll order, response routing, independent buses, partial RX, timing and water faults");
     return 0;
 }

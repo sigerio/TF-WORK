@@ -36,7 +36,7 @@ OF SUCH DAMAGE.
 #include "DEBUG/debug_console.h"
 #include "COMM/iec104/port/iec104_port.h"
 #include "COMM/modbus/modbus_master.h"
-#include "CONTROL/ws2812/ws2812_driver.h"
+#include "CONTROL/ws2812/driver/ws2812_driver.h"
 
 #include "BOARD/board_time.h"
 
@@ -187,7 +187,7 @@ void DMA0_Channel1_IRQHandler(void)
 
 void DMA0_Channel2_IRQHandler(void)
 {
-    module_ws2812_dma_irq();
+    ws2812_driver_dma_irq();
 }
 
 void DMA0_Channel5_IRQHandler(void)

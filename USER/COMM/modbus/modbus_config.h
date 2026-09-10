@@ -58,4 +58,8 @@
 #define MODULE_MODBUS_AC_ADDR                  1U  /**< 空调总线：空调设备 */
 #endif
 
+#ifndef MODULE_MODBUS_WEATHER_ADDR
+#define MODULE_MODBUS_WEATHER_ADDR             0xB4U /**< 气象总线：weather 板，单向同步整机故障。 */
+#endif
+
 #endif /* MODBUS_CONFIG_H */

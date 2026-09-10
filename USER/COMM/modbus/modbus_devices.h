@@ -12,7 +12,7 @@
 extern "C" {
 #endif
 
-/* 每次调用入队一项巡检请求，按 MODULE_MODBUS_QUEUE_FILL_PERIOD_MS 调度。 */
+/* 每次推进一项巡检；B4 项触发优先槽补发，其余请求入普通队列。 */
 void modbus_devices_poll(void);
 
 /* 异步写请求：true 只表示已入队，执行结果由后续响应更新缓存。 */

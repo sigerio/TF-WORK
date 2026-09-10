@@ -6,7 +6,7 @@
 #include "CONTROL/key/key_input.h"
 #include "CONTROL/output/aux_output.h"
 #include "CONTROL/motor/motor_control.h"
-#include "CONTROL/ws2812/ws2812_status.h"
+#include "APP/ws2812_app.h"
 
 #define IEC104_QUALITY_IV 0x80U
 #define IEC104_QUALITY_NT 0x40U
@@ -123,7 +123,7 @@ static void iec104_app_snapshot_read(iec104_app_snapshot_t *snapshot)
     memset(snapshot, 0, sizeof(*snapshot));
     motor_control_get_status(&snapshot->motor);
     aux_output_get_status(&snapshot->outputs);
-    snapshot->ws2812_effect_active = module_ws2812_effect_is_active();
+    snapshot->ws2812_effect_active = ws2812_app_is_active();
     (void)modbus_xm7828_get(&snapshot->th);
     (void)modbus_xm8189_get(&snapshot->wind);
     (void)modbus_xm8537_get(&snapshot->water);

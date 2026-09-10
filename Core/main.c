@@ -4,7 +4,7 @@
 #include "COMM/iec104/port/iec104_port.h"
 #include "COMM/modbus/modbus_master.h"
 #include "CONTROL/output/aux_output.h"
-#include "CONTROL/ws2812/ws2812_driver.h"
+#include "CONTROL/ws2812/driver/ws2812_driver.h"
 #include "APP/tasks/app_event_task.h"
 #include "APP/tasks/app_timer_task.h"
 #include "DEBUG/debug_console.h"
@@ -16,7 +16,7 @@ int main(void)
     board_time_init();
     debug_console_init();
     (void)iec104_port_init();
-    module_ws2812_init();
+    ws2812_driver_init();
     aux_output_init();
     modbus_master_init();
     key_init();

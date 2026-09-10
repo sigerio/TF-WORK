@@ -9,7 +9,8 @@ with tempfile.TemporaryDirectory(prefix="xj_ws2812_preview_") as directory:
     binary = str(Path(directory) / "effects")
     command = ["cc", "-std=c99", "-DGD32F10X_HD", "-ICMSIS", "-ICore", "-IGD32F10X/Include", "-IUSER",
                "-Wno-pointer-to-int-cast", "-ffunction-sections", "-fdata-sections", "-Wl,--gc-sections",
-               "tests/test_ws2812_debug.c", "USER/CONTROL/ws2812/ws2812_status.c", "USER/CONTROL/ws2812/ws2812_effect.c",
+               "tests/test_ws2812_debug.c", "USER/APP/ws2812_app.c", "USER/CONTROL/ws2812/effects/ws2812_basic.c",
+                "USER/CONTROL/ws2812/effects/ws2812_mechanical.c", "USER/CONTROL/ws2812/ws2812_frame.c",
                "USER/COMMON/ringbuf.c", "-o", binary]
     subprocess.run(command, cwd=ROOT, check=True)
     frames = json.loads(subprocess.check_output([binary, "--preview"], cwd=ROOT, text=True))

@@ -6,14 +6,15 @@
 #include "COMM/iec104/iec104_server.h"
 #include "COMM/modbus/modbus_master.h"
 #include "COMM/modbus/modbus_devices.h"
-#include "CONTROL/ws2812/ws2812_status.h"
+#include "APP/ws2812_app.h"
 #include "APP/app_events.h"
+#include "APP/app_fault.h"
 #include "DEBUG/debug_console.h"
 
 #define KEY_SCAN_PERIOD_MS 50U
 
 static const uint32_t key_scan_period_ms = KEY_SCAN_PERIOD_MS;
-static const uint32_t ws2812_period_ms = MODULE_WS2812_PERIOD_MS;
+static const uint32_t ws2812_period_ms = WS2812_APP_PERIOD_MS;
 
 /* 启动时及每次运动更新前读取物理急停，不等待普通按键扫描或软事件处理。 */
 static void update_estop_state(void)
@@ -89,11 +90,16 @@ static void motor_control_update_timer_task(void *arg)
     }
 }
 
+static void app_fault_timer_task(void *arg)
+{
+    (void)arg;
+    app_fault_update();
+}
 
-static void module_ws2812_run_timer_task(void *arg)
+static void ws2812_timer_task(void *arg)
 {
     const uint32_t *cycle_ms = (const uint32_t *)arg;
-    module_ws2812_status_update((uint16_t)*cycle_ms);
+    ws2812_app_update((uint16_t)*cycle_ms);
 }
 
 static void debug_console_timer_task(void *arg)
@@ -105,12 +111,14 @@ static void debug_console_timer_task(void *arg)
 void usr_time_task_init(void)
 {
     update_estop_state();
+    app_fault_update();
     os_soft_timer_task(modbus_master_timer_task, 0, MODULE_MODBUS_MASTER_PERIOD_MS, 10U);
     os_soft_timer_task(modbus_poll_timer_task, 0, MODULE_MODBUS_QUEUE_FILL_PERIOD_MS, 20U);
     os_soft_timer_task(iec104_server_comm_timer_task, 0, IEC104_SERVER_COMM_PERIOD_MS, 10U);
     os_soft_timer_task(iec104_server_report_timer_task, 0, IEC104_SERVER_REPORT_PERIOD_MS, 15U);
     os_soft_timer_task(key_scan_timer_task, (void *)&key_scan_period_ms, KEY_SCAN_PERIOD_MS, 30U);
     os_soft_timer_task(motor_control_update_timer_task, 0, MOTOR_CONTROL_PERIOD_MS, 2U);
-    os_soft_timer_task(module_ws2812_run_timer_task, (void*)&ws2812_period_ms, MODULE_WS2812_PERIOD_MS, 30U);
+    os_soft_timer_task(ws2812_timer_task, (void*)&ws2812_period_ms, WS2812_APP_PERIOD_MS, 30U);
     os_soft_timer_task(debug_console_timer_task, 0, 10U, 5U);
+    os_soft_timer_task(app_fault_timer_task, 0, APP_FAULT_PERIOD_MS, 12U);
 }
