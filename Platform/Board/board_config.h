@@ -184,7 +184,6 @@ typedef struct {
 extern const board_gpio_config_t board_gpio_configs[BOARD_PIN_COUNT];
 extern const board_usart_config_t board_usart_configs[BOARD_USART_COUNT];
 extern const board_dma_config_t board_dma_configs[BOARD_DMA_COUNT];
-extern const board_spi_config_t board_spi_configs[BOARD_SPI_COUNT];
 extern const board_pwm_config_t board_pwm_configs[BOARD_PWM_COUNT];
 
 void board_init(void);

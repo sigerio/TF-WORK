@@ -50,7 +50,7 @@ const board_usart_config_t board_usart_configs[BOARD_USART_COUNT] = {
         USART1, RCU_USART1, BOARD_PIN_USART1_TX, BOARD_PIN_USART1_RX,
         { BOARD_DMA_0, BOARD_DMA_CH5 },          
         { BOARD_DMA_0, BOARD_DMA_CH6 },          
-        BOARD_PIN_RS485_MAIN_DIR, 115200U, 
+        BOARD_PIN_RS485_MAIN_DIR, 9600U,
     },
     [BOARD_USART_WIND] = {
         USART2, RCU_USART2, BOARD_PIN_USART2_TX, BOARD_PIN_USART2_RX,

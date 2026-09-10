@@ -5,6 +5,14 @@
 
 #define UART_FRAME_MAX_SIZE 256U
 
+/* DIR optocoupler settling time; tune against the isolated-side waveform. */
+#ifndef RS485_TX_SETUP_US
+#define RS485_TX_SETUP_US 100U
+#endif
+#if RS485_TX_SETUP_US >= 65536U
+#error "RS485_TX_SETUP_US must fit the 16-bit microsecond timer"
+#endif
+
 #ifndef RX_TIMING_MARGIN_US
 #define RX_TIMING_MARGIN_US 100U
 #endif

@@ -6,16 +6,10 @@
 #include "task.h"
 #include <string.h>
 
-#define BOARD_USART1_DMA_RX_BUFFER_SIZE (2U * UART_FRAME_MAX_SIZE)
+#define BOARD_USART1_DMA_RX_BUFFER_SIZE UART_FRAME_MAX_SIZE
 #define BOARD_USART1_DMA_TX_BUFFER_SIZE UART_FRAME_MAX_SIZE
 
 static uint8_t usart1_dma_rx_buffer[BOARD_USART1_DMA_RX_BUFFER_SIZE];
-static volatile uint16_t usart1_dma_rx_read_index;
-static uint16_t usart1_dma_rx_frame_start;
-static uint16_t usart1_dma_rx_frame_length;
-static uint16_t usart1_dma_rx_last_us;
-static bool usart1_dma_rx_invalid;
-static uint32_t usart1_dma_rx_dropped;
 /* ponytail: 主控保留一帧待取；主控改为流水发送时扩展为完整帧 FIFO。 */
 static uint8_t usart1_dma_rx_pending_buffer[UART_FRAME_MAX_SIZE];
 static volatile uint16_t usart1_dma_rx_pending_len;
@@ -25,11 +19,16 @@ static volatile uint8_t usart1_dma_tx_busy;
 static uint16_t usart_tx_end_us[BOARD_USART_COUNT];
 static bool usart_tx_wait_gap[BOARD_USART_COUNT];
 
-
 static void board_usart_direction_set(const board_usart_config_t *config, FlagStatus level)
 {
     if (config->direction_pin != BOARD_PIN_NONE) {
         gpio_bit_write(BOARD_PIN_PORT(config->direction_pin), BOARD_PIN_PIN(config->direction_pin), level);
+        if (level == SET) {
+            uint16_t started = board_comm_time_us();
+            /* Allow the isolated DIR signal to settle before the first start bit. */
+            while ((uint16_t)(board_comm_time_us() - started) < RS485_TX_SETUP_US) {
+            }
+        }
     }
 }
 
@@ -78,15 +77,13 @@ void board_usart_main_dma_rx_init(void)
     dma_init_struct.periph_width = DMA_PERIPHERAL_WIDTH_8BIT;
     dma_init_struct.priority = DMA_PRIORITY_HIGH;
     dma_init(dma_config->controller, dma_channel_config->channel, &dma_init_struct);
-    dma_circulation_enable(dma_config->controller, dma_channel_config->channel);
-    usart_dma_receive_config(usart_config->peripheral, USART_RECEIVE_DMA_ENABLE);
-    usart_interrupt_enable(usart_config->peripheral, USART_INT_IDLE);
-    usart_interrupt_enable(usart_config->peripheral, USART_INT_ERR);
-    nvic_irq_enable(USART1_IRQn, 5U, 0U);
-    usart1_dma_rx_read_index = 0U;
+    dma_circulation_disable(dma_config->controller, dma_channel_config->channel);
     usart1_dma_rx_pending_len = 0U;
     usart1_dma_rx_pending_ready = 0U;
     dma_channel_enable(dma_config->controller, dma_channel_config->channel);
+    usart_dma_receive_config(usart_config->peripheral, USART_RECEIVE_DMA_ENABLE);
+    usart_interrupt_enable(usart_config->peripheral, USART_INT_IDLE);
+    nvic_irq_enable(USART1_IRQn, 5U, 0U);
 }
 
 static bool board_usart_tx_ready(board_usart_id_e usart_id)
@@ -115,7 +112,6 @@ bool board_usart_main_dma_send(const uint8_t *data, uint16_t data_len)
     }
 
     memcpy(usart1_dma_tx_buffer, data, data_len);
-    usart1_dma_tx_busy = 1U;
     usart_receive_config(USART1, USART_RECEIVE_DISABLE);
     board_usart_direction_set(usart_config, SET);
     dma_channel_disable(dma_config->controller, dma_channel_config->channel);
@@ -124,6 +120,8 @@ bool board_usart_main_dma_send(const uint8_t *data, uint16_t data_len)
     dma_transfer_number_config(dma_config->controller, dma_channel_config->channel, data_len);
     usart_interrupt_disable(usart_config->peripheral, USART_INT_TC);
     usart_flag_clear(usart_config->peripheral, USART_FLAG_TC);
+    /* Publish busy only after DMA count and TC are ready for completion polling. */
+    usart1_dma_tx_busy = 1U;
     usart_dma_transmit_config(usart_config->peripheral, USART_TRANSMIT_DMA_ENABLE);
     dma_channel_enable(dma_config->controller, dma_channel_config->channel);
     usart_interrupt_enable(USART1, USART_INT_TC);
@@ -132,69 +130,28 @@ bool board_usart_main_dma_send(const uint8_t *data, uint16_t data_len)
 
 void board_usart_main_dma_rx_idle_irq_handler(void)
 {
-    uint32_t status = USART_STAT(USART1);
-    if ((status & (USART_STAT_ORERR | USART_STAT_NERR | USART_STAT_FERR | USART_STAT_PERR)) != 0U) {
-        (void)USART_DATA(USART1);
-        usart1_dma_rx_invalid = true;
-    } else if ((status & USART_STAT_IDLEF) != 0U) {
-        (void)USART_DATA(USART1);
-    }
-}
+    const board_dma_ref_t ref = board_usart_configs[BOARD_USART_MAIN].rx_dma;
+    const board_dma_config_t *config = &board_dma_configs[ref.dma];
+    dma_channel_enum channel = BOARD_DMA_CH(ref)->channel;
+    uint16_t remaining;
+    uint16_t length;
 
-static void board_usart_main_dma_rx_poll(uint16_t now)
-{
-    uint32_t baudrate = board_usart_configs[BOARD_USART_MAIN].baudrate;
-    uint32_t byte_gap = (10000000U + baudrate - 1U) / baudrate +
-        ((baudrate > 19200U) ? 750U : (15000000U + baudrate - 1U) / baudrate);
-    uint16_t write_index = (uint16_t)(BOARD_USART1_DMA_RX_BUFFER_SIZE -
-        dma_transfer_number_get(DMA0, DMA_CH5));
-    if (write_index == BOARD_USART1_DMA_RX_BUFFER_SIZE) {
-        write_index = 0U;
-    }
-    if (write_index != usart1_dma_rx_read_index) {
-        uint16_t received = (uint16_t)((write_index + BOARD_USART1_DMA_RX_BUFFER_SIZE -
-            usart1_dma_rx_read_index) % BOARD_USART1_DMA_RX_BUFFER_SIZE);
-        if (usart1_dma_rx_frame_length != 0U &&
-            (uint16_t)(now - usart1_dma_rx_last_us) >
-            (byte_gap + RX_TIMING_MARGIN_US + 100U)) {
-            usart1_dma_rx_invalid = true;
-        }
-        if (usart1_dma_rx_frame_length + received <= UART_FRAME_MAX_SIZE) {
-            usart1_dma_rx_frame_length += received;
-        } else {
-            usart1_dma_rx_invalid = true;
-            usart1_dma_rx_frame_length = UART_FRAME_MAX_SIZE + 1U;
-        }
-        usart1_dma_rx_read_index = write_index;
-        usart1_dma_rx_last_us = now;
-    }
-    if (usart1_dma_tx_busy != 0U) {
-        usart1_dma_rx_frame_length = 0U;
-        usart1_dma_rx_frame_start = write_index;
-        usart1_dma_rx_invalid = false;
+    if (RESET == usart_interrupt_flag_get(USART1, USART_INT_FLAG_IDLE)) {
         return;
     }
-    if ((usart1_dma_rx_frame_length == 0U && !usart1_dma_rx_invalid) ||
-        (uint16_t)(now - usart1_dma_rx_last_us) < board_rtu_gap_us(BOARD_USART_MAIN)) {
-        return;
-    }
-    if (!usart1_dma_rx_invalid && usart1_dma_rx_frame_length >= 4U &&
-        usart1_dma_rx_pending_ready == 0U) {
-        uint16_t first_length = BOARD_USART1_DMA_RX_BUFFER_SIZE - usart1_dma_rx_frame_start;
-        if (first_length > usart1_dma_rx_frame_length) {
-            first_length = usart1_dma_rx_frame_length;
-        }
-        memcpy(usart1_dma_rx_pending_buffer, &usart1_dma_rx_buffer[usart1_dma_rx_frame_start], first_length);
-        memcpy(&usart1_dma_rx_pending_buffer[first_length], usart1_dma_rx_buffer,
-            usart1_dma_rx_frame_length - first_length);
-        usart1_dma_rx_pending_len = usart1_dma_rx_frame_length;
+
+    usart_data_receive(USART1);
+    remaining = (uint16_t)dma_transfer_number_get(config->controller, channel);
+    length = BOARD_USART1_DMA_RX_BUFFER_SIZE - remaining;
+    if (length != 0U && usart1_dma_rx_pending_ready == 0U) {
+        memcpy(usart1_dma_rx_pending_buffer, usart1_dma_rx_buffer, length);
+        usart1_dma_rx_pending_len = length;
         usart1_dma_rx_pending_ready = 1U;
-    } else {
-        usart1_dma_rx_dropped++;
     }
-    usart1_dma_rx_frame_start = write_index;
-    usart1_dma_rx_frame_length = 0U;
-    usart1_dma_rx_invalid = false;
+    dma_channel_disable(config->controller, channel);
+    dma_memory_address_config(config->controller, channel, (uint32_t)usart1_dma_rx_buffer);
+    dma_transfer_number_config(config->controller, channel, BOARD_USART1_DMA_RX_BUFFER_SIZE);
+    dma_channel_enable(config->controller, channel);
 }
 
 bool board_usart_main_dma_rx_fetch(uint8_t *data, uint16_t *data_len)
@@ -311,7 +268,6 @@ void board_comm_timer_irq_handler(void)
         timer_interrupt_flag_clear(TIMER2, TIMER_INT_FLAG_CH0);
         timer_channel_output_pulse_value_config(TIMER2, TIMER_CH_0, (uint16_t)(now + 100U));
         board_usart_rx_tick(now);
-        board_usart_main_dma_rx_poll(now);
     }
 }
 

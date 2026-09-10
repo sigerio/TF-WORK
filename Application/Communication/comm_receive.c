@@ -155,6 +155,7 @@ static void rx_frame_submit(DATA_MARK_E data_mark, const uint8_t *data, uint16_t
 {
     my_message_node_t node;
     bool submitted = false;
+    comm_log_frame(data_mark, data, length);
     if (length < 4U || length > MY_MESSAGE_DATA_SIZE || modbus_rtu_crc16(data, length) != 0U)
     {
         invalid_frames++;

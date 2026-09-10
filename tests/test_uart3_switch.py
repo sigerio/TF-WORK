@@ -9,6 +9,7 @@ STUBS = {
 #include <stdint.h>
 #include <stdlib.h>
 typedef unsigned TickType_t;
+#define configTICK_RATE_HZ 1000U
 #define pdPASS 1
 #define portMAX_DELAY 0xffffffffU
 #define pdMS_TO_TICKS(value) (value)
@@ -24,7 +25,13 @@ int xQueueReceive(QueueHandle_t queue, void *item, unsigned wait);
 int xQueuePeek(QueueHandle_t queue, void *item, unsigned wait);
 unsigned uxQueueSpacesAvailable(QueueHandle_t queue);
 """,
-    "task.h": "void vTaskDelay(unsigned ticks);\n",
+    "task.h": "TickType_t xTaskGetTickCount(void);\nvoid vTaskDelay(unsigned ticks);\nvoid vTaskSuspendAll(void);\nint xTaskResumeAll(void);\n",
+    "SEGGER_RTT.h": """#pragma once
+typedef struct { unsigned RdOff, WrOff, SizeOfBuffer; } RTT_BUFFER;
+typedef struct { RTT_BUFFER aUp[1]; } RTT_CONTROL;
+extern RTT_CONTROL _SEGGER_RTT;
+int SEGGER_RTT_printf(unsigned channel, const char *format, ...);
+""",
     "uart_transport.h": """#pragma once
 #define RX_TIMING_MARGIN_US 100U
 #include <stdbool.h>
@@ -42,9 +49,30 @@ bool board_usart_send(board_usart_id_e port, const uint8_t *data, uint16_t size)
 }
 CHECK = r"""#include <assert.h>
 #include <setjmp.h>
+#include <stdarg.h>
+#include <stdio.h>
 #include <string.h>
 #include "comm_dispatch.c"
 #include "comm_receive.c"
+
+RTT_CONTROL _SEGGER_RTT = {{{0, 0, 1024}}};
+static unsigned log_count;
+static TickType_t mock_ticks;
+TickType_t xTaskGetTickCount(void) { return mock_ticks; }
+static unsigned scheduler_suspended;
+static char last_log[1024];
+void vTaskSuspendAll(void) { scheduler_suspended++; }
+int xTaskResumeAll(void) { assert(scheduler_suspended == 1); scheduler_suspended--; return 0; }
+int SEGGER_RTT_printf(unsigned channel, const char *format, ...) {
+    va_list arguments;
+    assert(channel == 0 && scheduler_suspended == 1);
+    va_start(arguments, format);
+    int length = vsnprintf(last_log, sizeof(last_log), format, arguments);
+    va_end(arguments);
+    assert(length > 0 && (unsigned)length < sizeof(last_log));
+    log_count++;
+    return length;
+}
 
 const board_usart_config_t board_usart_configs[BOARD_USART_COUNT] = {
     {9600}, {9600}, {9600}, {9600}
@@ -158,6 +186,7 @@ static void finish(void) {
 }
 
 static void check_receive(void) {
+    unsigned previous_invalid = invalid_frames;
     uint8_t frame[] = {1, 3, 2, 0, 42, 0, 0};
     uint8_t received[256];
     modbus_rtu_append_crc(frame, 5);
@@ -174,13 +203,16 @@ static void check_receive(void) {
     unsigned previous = queue_count;
     queue_spaces = 1;
     unsigned previous_waits = waits;
+    unsigned previous_logs = log_count;
     rx_frame_submit(UART3_RX_MARK, received, sizeof(frame));
+    assert(log_count == previous_logs + 1 && strstr(last_log, "UART3 RX len=7"));
     assert(waits > previous_waits && queue_count == previous + 1);
     assert(queued.data_mark == UART3_RX_MARK && memcmp(queued.data, frame, sizeof(frame)) == 0);
     vPortFree(queued.data);
     received[4] ^= 1;
     rx_frame_submit(UART3_RX_MARK, received, sizeof(frame));
-    assert(queue_count == previous + 1 && invalid_frames == 1);
+    assert(log_count == previous_logs + 1);
+    assert(queue_count == previous + 1 && invalid_frames == previous_invalid + 1);
 
     for (unsigned index = 0; index < RX_FRAME_SLOTS + 1; index++) {
         feed(BOARD_USART_RAIN, frame, sizeof(frame));
@@ -237,7 +269,178 @@ static void check_receive(void) {
     assert(allocations == 0);
 }
 
+static void check_logging(void) {
+    uint8_t frame[MY_MESSAGE_DATA_SIZE] = {1, 3, 2, 0, 42};
+    modbus_rtu_append_crc(frame, sizeof(frame) - 2);
+    const DATA_MARK_E marks[] = {DATA_FROM_TC, DATA_FROM_MAIN, DATA_FROM_WIND, UART3_RX_MARK,
+                                DATA_TO_TC, DATA_TO_MAIN, DATA_TO_WIND, UART3_TX_MARK};
+    for (unsigned index = 0; index < sizeof(marks) / sizeof(marks[0]); index++) {
+        char prefix[64];
+        mock_ticks = index == 7 ? 0xffffffffU : 123456U + index;
+        snprintf(prefix, sizeof(prefix), "[%u ms] [UART%u %s len=256] ", mock_ticks, index % 4, index < 4 ? "RX" : "TX");
+        unsigned previous = log_count;
+        comm_log_frame(marks[index], frame, sizeof(frame));
+        assert(log_count == previous + 1 && strncmp(last_log, prefix, strlen(prefix)) == 0);
+        assert(strlen(last_log) == strlen(prefix) + 3 * sizeof(frame) - 1 + 2);
+        for (unsigned byte = 0; byte < sizeof(frame); byte++) {
+            char expected[3];
+            snprintf(expected, sizeof(expected), "%02X", frame[byte]);
+            assert(strncmp(last_log + strlen(prefix) + 3 * byte, expected, 2) == 0);
+        }
+    }
+    unsigned previous = log_count;
+    frame[4] ^= 1;
+    comm_log_frame(DATA_FROM_MAIN, frame, sizeof(frame));
+    assert(log_count == previous);
+    comm_log_frame(DATA_TO_MAIN, frame, sizeof(frame));
+    assert(log_count == previous);
+    for (unsigned length = 1; length < 4; length++) {
+        comm_log_frame(DATA_FROM_MAIN, frame, length);
+        comm_log_frame(DATA_TO_MAIN, frame, length);
+    }
+    assert(log_count == previous);
+    previous = log_count;
+    comm_log_frame(DATA_FROM_WIND, frame, sizeof(frame));
+    comm_log_frame(DATA_TO_WIND, frame, sizeof(frame));
+    comm_log_frame(DATA_FROM_MAIN, NULL, 8);
+    comm_log_frame(DATA_FROM_MAIN, frame, 0);
+    comm_log_frame(DATA_FROM_MAIN, frame, MY_MESSAGE_DATA_SIZE + 1);
+    frame[4] ^= 1;
+    comm_log_frame(DATA_MARK_NONE, frame, sizeof(frame));
+    _SEGGER_RTT.aUp[0].WrOff = 1000;
+    comm_log_frame(DATA_FROM_MAIN, frame, sizeof(frame));
+    assert(log_count == previous);
+    _SEGGER_RTT.aUp[0].RdOff = 900;
+    _SEGGER_RTT.aUp[0].WrOff = 50;
+    comm_log_frame(DATA_FROM_MAIN, frame, sizeof(frame));
+    assert(log_count == previous + 1 && scheduler_suspended == 0);
+    _SEGGER_RTT.aUp[0].RdOff = 0;
+    _SEGGER_RTT.aUp[0].WrOff = 0;
+}
+
+static void check_main_raw_receive(void) {
+    uint8_t frame[] = {99, 3, 0, 0, 0, 1, 0, 0};
+    const unsigned lengths[] = {1, 2, 3, sizeof(frame)};
+    modbus_rtu_append_crc(frame, 6);
+    unsigned previous_logs = log_count;
+    unsigned previous_queue = queue_count;
+    rx_frame_submit(DATA_FROM_MAIN, frame, sizeof(frame));
+    assert(log_count == previous_logs + 1 && strstr(last_log, "UART1 RX len=8"));
+    assert(queue_count == previous_queue + 1);
+    assert(queued.data_mark == DATA_FROM_MAIN && memcmp(queued.data, frame, sizeof(frame)) == 0);
+    assert(node_analyze(queued) && queue_count == previous_queue + 1);
+    vPortFree(queued.data);
+    frame[7] ^= 1;
+    previous_logs = log_count;
+    unsigned previous_invalid = invalid_frames;
+    for (unsigned index = 0; index < sizeof(lengths) / sizeof(lengths[0]); index++) {
+        rx_frame_submit(DATA_FROM_MAIN, frame, lengths[index]);
+        assert(log_count == previous_logs);
+        assert(invalid_frames == previous_invalid + index + 1);
+        assert(queue_count == previous_queue + 1 && allocations == 0);
+    }
+    previous_logs = log_count;
+    assert(message_send(DATA_TO_MAIN, frame, sizeof(frame)));
+    assert(log_count == previous_logs);
+}
+
+
+static void check_weather_fault(void) {
+    uint8_t examples[][9] = {
+        {0xB4, 0x41, 4, 0, 0, 0, 0, 0x11, 0xDA},
+        {0xB4, 0x41, 4, 1, 0, 0, 0, 0x10, 0x26},
+        {0xB4, 0x41, 4, 0x78, 0x56, 0x34, 0x12, 0x7F, 0xA7}
+    };
+    const uint32_t values[] = {0, 1, 0x12345678};
+    weather_fault_u fault = {.raw = 0xDEADBEEF};
+    unsigned sent_before = send_count;
+    assert(sizeof(fault) == sizeof(uint32_t));
+    assert(!weather_fault_get(NULL));
+    assert(!weather_fault_get(&fault) && fault.raw == 0xDEADBEEF);
+    uint8_t malformed[10] = {0xB4, 0x41, 4};
+    assert(node_analyze((my_message_node_t){malformed, 9, DATA_FROM_MAIN}));
+    assert(!weather_fault_get(&fault));
+    for (unsigned index = 0; index < 3; ++index) {
+        unsigned previous = queue_count;
+        unsigned logs = log_count;
+        rx_frame_submit(DATA_FROM_MAIN, examples[index], 9);
+        assert(log_count == logs + 1 && strstr(last_log, "UART1 RX len=9"));
+        assert(queue_count == previous + 1 && allocations == 1);
+        assert(node_analyze(queued));
+        assert(weather_fault_get(&fault) && fault.raw == values[index]);
+        assert(queue_count == previous + 1 && send_count == sent_before);
+        vPortFree(queued.data);
+        assert(allocations == 0);
+    }
+    /* Valid CRC but wrong function/count/address must preserve the snapshot. */
+    unsigned previous = queue_count;
+    for (unsigned field = 0; field < 3; ++field) {
+        memcpy(malformed, examples[0], 9);
+        malformed[field] ^= 1;
+        modbus_rtu_append_crc(malformed, 7);
+        assert(node_analyze((my_message_node_t){malformed, 9, DATA_FROM_MAIN}));
+        assert(weather_fault_get(&fault) && fault.raw == 0x12345678);
+    }
+    for (unsigned length = 1; length <= sizeof(malformed); ++length) {
+        if (length == 9) continue;
+        memcpy(malformed, examples[0], 9);
+        if (length >= 4) modbus_rtu_append_crc(malformed, length - 2);
+        assert(node_analyze((my_message_node_t){malformed, length, DATA_FROM_MAIN}));
+        assert(weather_fault_get(&fault) && fault.raw == 0x12345678);
+    }
+    memcpy(malformed, examples[0], 9);
+    malformed[8] ^= 1;
+    rx_frame_submit(DATA_FROM_MAIN, malformed, 9);
+    assert(node_analyze((my_message_node_t){malformed, 9, DATA_FROM_MAIN}));
+    assert(node_analyze((my_message_node_t){examples[0], 9, UART3_RX_MARK}));
+    assert(node_analyze((my_message_node_t){NULL, 9, DATA_FROM_MAIN}));
+    assert(weather_fault_get(&fault) && fault.raw == 0x12345678);
+    assert(queue_count == previous && send_count == sent_before && allocations == 0);
+    /* A later zero clears all faults; repeated notifications are harmless. */
+    for (unsigned repeat = 0; repeat < 2; ++repeat) {
+        assert(node_analyze((my_message_node_t){examples[0], 9, DATA_FROM_MAIN}));
+        assert(weather_fault_get(&fault) && fault.raw == 0);
+    }
+    assert(queue_count == previous && send_count == sent_before);
+    /* Verify the documented bit and severity layout. */
+#define CHECK_FAULT_BIT(name, bit) do { fault.raw = 1UL << (bit); assert(fault.bits.name == 1); } while (0)
+    CHECK_FAULT_BIT(emergency_stop, 0);
+    CHECK_FAULT_BIT(door_limit_conflict, 1);
+    CHECK_FAULT_BIT(platform_limit_conflict, 2);
+    CHECK_FAULT_BIT(water_detected, 3);
+    CHECK_FAULT_BIT(door_start_failed, 4);
+    CHECK_FAULT_BIT(platform_start_failed, 5);
+    CHECK_FAULT_BIT(ac_high_temp, 6);
+    CHECK_FAULT_BIT(ac_low_temp, 7);
+    CHECK_FAULT_BIT(ac_humidity_high, 8);
+    CHECK_FAULT_BIT(ac_condenser_high_pressure, 9);
+    CHECK_FAULT_BIT(ac_evaporator_freeze, 10);
+    CHECK_FAULT_BIT(ac_cooling_alarm, 11);
+    CHECK_FAULT_BIT(th_offline, 12);
+    CHECK_FAULT_BIT(wind_offline, 13);
+    CHECK_FAULT_BIT(water_offline, 14);
+    CHECK_FAULT_BIT(rain_offline, 15);
+    CHECK_FAULT_BIT(ac_offline, 16);
+    CHECK_FAULT_BIT(th_sensor_fault, 17);
+    CHECK_FAULT_BIT(wind_sensor_fault, 18);
+    CHECK_FAULT_BIT(water_sensor_fault, 19);
+    CHECK_FAULT_BIT(rain_sensor_fault, 20);
+    CHECK_FAULT_BIT(ac_cabinet_sensor_fault, 21);
+    CHECK_FAULT_BIT(ac_evaporator_sensor_fault, 22);
+    CHECK_FAULT_BIT(ac_condenser_sensor_fault, 23);
+    CHECK_FAULT_BIT(ac_humidity_sensor_fault, 24);
+#undef CHECK_FAULT_BIT
+    fault.raw = 0x0000000F;
+    assert(fault.levels.p1 == 15 && fault.levels.p2 == 0 && fault.levels.p3 == 0);
+    fault.raw = 0x00000FF0;
+    assert(fault.levels.p1 == 0 && fault.levels.p2 == 255 && fault.levels.p3 == 0);
+    fault.raw = 0x01FFF000;
+    assert(fault.levels.p1 == 0 && fault.levels.p2 == 0 && fault.levels.p3 == 8191);
+}
+
 int main(void) {
+    check_logging();
+    check_weather_fault();
     for (int mark = 0; mark < DATA_MARK_CNT; mark++) {
         node_consume_func_t saved = node_consume_func[mark];
         node_consume_func[mark].func = check_callback;
@@ -294,10 +497,14 @@ int main(void) {
     assert(queue_count == previous && allocations == 0);
     allocation_failed = false;
     send_result = false;
+    unsigned previous_logs = log_count;
     assert(!node_analyze((my_message_node_t){frame, sizeof(frame), DATA_TO_MAIN}));
+    assert(log_count == previous_logs);
     send_result = true;
     assert(node_analyze((my_message_node_t){frame, sizeof(frame), DATA_TO_MAIN}));
+    assert(log_count == previous_logs + 1 && strstr(last_log, "UART1 TX len=8"));
     check_receive();
+    check_main_raw_receive();
     task_node = (my_message_node_t){pvPortMalloc(8), 8, DATA_TO_MAIN};
     memset(task_node.data, 0, 8);
     send_result = false;

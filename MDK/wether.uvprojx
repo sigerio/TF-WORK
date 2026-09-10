@@ -7,7 +7,7 @@
 
   <Targets>
     <Target>
-      <TargetName>XJ</TargetName>
+      <TargetName>WET</TargetName>
       <ToolsetNumber>0x4</ToolsetNumber>
       <ToolsetName>ARM-ADS</ToolsetName>
       <pCCUsed>5060960::V5.06 update 7 (build 960)::.\ARM_Compiler_5.06u7</pCCUsed>
@@ -49,7 +49,7 @@
             <InvalidFlash>1</InvalidFlash>
           </TargetStatus>
           <OutputDirectory>.\Objects\</OutputDirectory>
-          <OutputName>xj_jc</OutputName>
+          <OutputName>wether</OutputName>
           <CreateExecutable>1</CreateExecutable>
           <CreateLib>0</CreateLib>
           <CreateHexFile>1</CreateHexFile>
@@ -883,7 +883,7 @@
       <api Capiversion="1.1.0" Cclass="CMSIS-Compiler" Cgroup="STDERR" condition="CortexDevice" exclusive="1">
         <package name="CMSIS-Compiler" schemaVersion="1.7.36" url="https://www.keil.com/pack/" vendor="ARM" version="2.1.0"/>
         <targetInfos>
-          <targetInfo name="XJ"/>
+          <targetInfo name="WET"/>
         </targetInfos>
       </api>
     </apis>
@@ -891,13 +891,13 @@
       <component Cclass="CMSIS-Compiler" Cgroup="CORE" Cvendor="ARM" Cversion="1.1.0" condition="ARMCC CortexDevice" ymlID="CMSIS-Compiler:CORE">
         <package name="CMSIS-Compiler" schemaVersion="1.7.36" url="https://www.keil.com/pack/" vendor="ARM" version="2.1.0"/>
         <targetInfos>
-          <targetInfo name="XJ"/>
+          <targetInfo name="WET"/>
         </targetInfos>
       </component>
       <component Capiversion="1.1.0" Cclass="CMSIS-Compiler" Cgroup="STDERR" Csub="ITM" Cvendor="ARM" Cversion="1.1.0" condition="CORE ITM" ymlID="CMSIS-Compiler:STDERR:ITM">
         <package name="CMSIS-Compiler" schemaVersion="1.7.36" url="https://www.keil.com/pack/" vendor="ARM" version="2.1.0"/>
         <targetInfos>
-          <targetInfo name="XJ"/>
+          <targetInfo name="WET"/>
         </targetInfos>
       </component>
     </components>
