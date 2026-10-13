@@ -133,6 +133,11 @@ void UART3_IRQHandler(void)
     board_usart_rx_irq_handler(BOARD_USART_RAIN);
 }
 
+void UART4_IRQHandler(void)
+{
+    board_usart_rx_irq_handler(BOARD_USART_WATER);
+}
+
 void USART1_IRQHandler(void)
 {
     board_usart_main_dma_tx_poll();

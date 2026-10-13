@@ -14,7 +14,8 @@ const board_usart_config_t board_usart_configs[BOARD_USART_COUNT] = {
         .direction_pin = BOARD_PIN_RS485_MAIN_DIR, .tx_dma = {BOARD_DMA_0, BOARD_DMA_CH6}},
     [BOARD_USART_TC] = {.peripheral = USART0, .baudrate = 9600, .direction_pin = BOARD_PIN_RS485_MAIN_DIR},
     [BOARD_USART_WIND] = {.peripheral = USART2, .baudrate = 9600, .direction_pin = BOARD_PIN_RS485_MAIN_DIR},
-    [BOARD_USART_RAIN] = {.peripheral = UART3, .baudrate = 9600, .direction_pin = BOARD_PIN_RS485_MAIN_DIR}
+    [BOARD_USART_RAIN] = {.peripheral = UART3, .baudrate = 9600, .direction_pin = BOARD_PIN_RS485_MAIN_DIR},
+    [BOARD_USART_WATER] = {.peripheral = UART4, .baudrate = 9600, .direction_pin = BOARD_PIN_RS485_MAIN_DIR}
 };
 const board_dma_config_t board_dma_configs[BOARD_DMA_COUNT] = {
     [BOARD_DMA_0] = {.controller = DMA0, .ch = {[BOARD_DMA_CH6] = {.channel = DMA_CH6}}}
@@ -89,7 +90,7 @@ int main(void) {
         }
         assert(!direction && receiver);
     }
-    assert(transmitted == 3 * sizeof(data));
+    assert(transmitted == 4 * sizeof(data));
     board_usart_config_t unisolated = {.direction_pin = BOARD_PIN_NONE};
     uint32_t before = clock_us;
     board_usart_direction_set(&unisolated, SET);

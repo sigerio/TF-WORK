@@ -279,6 +279,7 @@ void uart_transport_init(void)
     board_usart_main_dma_rx_init();
     board_usart_init(BOARD_USART_WIND, USART2_IRQn, 1U);
     board_usart_init(BOARD_USART_RAIN, UART3_IRQn, 1U);
+    board_usart_init(BOARD_USART_WATER, UART4_IRQn, 1U);
     board_comm_timer_init();
 }
 

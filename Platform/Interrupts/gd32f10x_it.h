@@ -64,6 +64,8 @@ void USART1_IRQHandler(void);
 void USART2_IRQHandler(void);
 /* UART3 handle function */
 void UART3_IRQHandler(void);
+/* UART4 handle function */
+void UART4_IRQHandler(void);
 /* DMA0 channel5 handle function */
 void DMA0_Channel5_IRQHandler(void);
 void DMA0_Channel6_IRQHandler(void);

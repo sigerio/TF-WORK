@@ -23,14 +23,14 @@ const board_gpio_config_t board_gpio_configs[BOARD_PIN_COUNT] = {
     [BOARD_PIN_USART2_RX] = { GPIOB, GPIO_PIN_11, GPIO_MODE_IN_FLOATING, GPIO_OSPEED_50MHZ, 0U },
     [BOARD_PIN_USART3_TX] = { GPIOC, GPIO_PIN_10, GPIO_MODE_AF_PP,       GPIO_OSPEED_50MHZ, 0U },
     [BOARD_PIN_USART3_RX] = { GPIOC, GPIO_PIN_11, GPIO_MODE_IN_FLOATING, GPIO_OSPEED_50MHZ, 0U },
-    // [BOARD_PIN_UART4_TX]  = { GPIOC, GPIO_PIN_12, GPIO_MODE_AF_PP,       GPIO_OSPEED_50MHZ, 0U },
-    // [BOARD_PIN_UART4_RX]  = { GPIOD, GPIO_PIN_2,  GPIO_MODE_IN_FLOATING, GPIO_OSPEED_50MHZ, 0U },
+    [BOARD_PIN_UART4_TX]  = { GPIOC, GPIO_PIN_12, GPIO_MODE_AF_PP,       GPIO_OSPEED_50MHZ, 0U },
+    [BOARD_PIN_UART4_RX]  = { GPIOD, GPIO_PIN_2,  GPIO_MODE_IN_FLOATING, GPIO_OSPEED_50MHZ, 0U },
     /* ---- 485 方向 (高=发送, 默认低=接收) ---- */
     [BOARD_PIN_RS485_MAIN_DIR] = { GPIOA, GPIO_PIN_1,  GPIO_MODE_OUT_PP, GPIO_OSPEED_50MHZ, 0U },     /* PA1  - 主板 */
     [BOARD_PIN_RS485_WIND_DIR] = { GPIOB, GPIO_PIN_2,  GPIO_MODE_OUT_PP, GPIO_OSPEED_50MHZ, 0U },     /* PB2  - 风速 */
     [BOARD_PIN_RS485_RAIN_DIR] = { GPIOA, GPIO_PIN_15,  GPIO_MODE_OUT_PP, GPIO_OSPEED_50MHZ, 0U },     /* PA15 - 雨量 */
     [BOARD_PIN_RS485_TC_DIR] = { GPIOA, GPIO_PIN_8,  GPIO_MODE_OUT_PP, GPIO_OSPEED_50MHZ, 0U },      /* PA8  - 温湿度 */
-    
+    [BOARD_PIN_RS485_WATER_DIR] = { GPIOB, GPIO_PIN_13,  GPIO_MODE_OUT_PP, GPIO_OSPEED_50MHZ, 0U },
     /* ---- 其它输出 (拉低触发, 默认拉高=关) ---- */
     
     [BOARD_PIN_LED] = { GPIOC, GPIO_PIN_7, GPIO_MODE_OUT_PP, GPIO_OSPEED_50MHZ, 1U }, /* PC7 - 指示灯 */
@@ -64,12 +64,12 @@ const board_usart_config_t board_usart_configs[BOARD_USART_COUNT] = {
         BOARD_DMA_REF_NONE,       
         BOARD_PIN_RS485_RAIN_DIR, 9600U,
     },
-    // [BOARD_USART_WATER] = {
-    //     UART4, RCU_UART4, BOARD_PIN_UART4_TX, BOARD_PIN_UART4_RX,
-    //     BOARD_DMA_REF_NONE,                       
-    //     BOARD_DMA_REF_NONE,                       
-    //     BOARD_PIN_RS485_BRUSHLESS_DIR, 9600U,
-    // },
+    [BOARD_USART_WATER] = {
+        UART4, RCU_UART4, BOARD_PIN_UART4_TX, BOARD_PIN_UART4_RX,
+        BOARD_DMA_REF_NONE,
+        BOARD_DMA_REF_NONE,
+        BOARD_PIN_RS485_WATER_DIR, 9600U,
+    },
 };
 
 /* DMA 控制器：ch id -> (通道实例, 外设地址, 方向, io id) 链
@@ -100,12 +100,14 @@ void board_init(void)
     rcu_periph_clock_enable(RCU_GPIOA);
     rcu_periph_clock_enable(RCU_GPIOB);
     rcu_periph_clock_enable(RCU_GPIOC);
+    rcu_periph_clock_enable(RCU_GPIOD);
     gpio_pin_remap_config(GPIO_SWJ_SWDPENABLE_REMAP, ENABLE);
 
     board_gpio_init(BOARD_PIN_RS485_MAIN_DIR);
     board_gpio_init(BOARD_PIN_RS485_TC_DIR);
     board_gpio_init(BOARD_PIN_RS485_WIND_DIR);
     board_gpio_init(BOARD_PIN_RS485_RAIN_DIR);
+    board_gpio_init(BOARD_PIN_RS485_WATER_DIR);
     board_gpio_init(BOARD_PIN_LED);
     board_gpio_init(BOARD_PIN_BEEP);
 

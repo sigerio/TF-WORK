@@ -10,6 +10,8 @@
 #define MODBUS_FRAME_MIN_LEN     4U
 #define MODBUS_ADDR_SINGLE_SLAVE 1U
 #define MODBUS_ADDR_WIND         2U
+#define MODBUS_ADDR_RAIN         3U
+#define MODBUS_ADDR_WATER        4U
 #define MODBUS_ADDR_TC           5U
 #define MODBUS_ADDR_WEATHER      0xB4U
 #define WEATHER_FAULT_FUNCTION   0x41U
@@ -66,11 +68,13 @@ void comm_log_frame(DATA_MARK_E data_mark, const uint8_t *data, uint16_t data_le
     switch (data_mark) {
     case DATA_FROM_MAIN: label = "UART1 RX"; break;
     case DATA_FROM_WIND: label = "UART2 RX"; break;
-    case UART3_RX_MARK: label = "UART3 RX"; break;
+    case DATA_FROM_RAIN: label = "UART3 RX"; break;
+    case DATA_FROM_WATER: label = "UART4 RX"; break;
     case DATA_FROM_TC: label = "UART0 RX"; break;
     case DATA_TO_MAIN: label = "UART1 TX"; break;
     case DATA_TO_WIND: label = "UART2 TX"; break;
-    case UART3_TX_MARK: label = "UART3 TX"; break;
+    case DATA_TO_RAIN: label = "UART3 TX"; break;
+    case DATA_TO_WATER: label = "UART4 TX"; break;
     case DATA_TO_TC: label = "UART0 TX"; break;
     default: return;
     }
@@ -135,8 +139,11 @@ static bool slave_message_issue(DATA_MARK_E data_mark, uint8_t *data, uint16_t d
     case DATA_FROM_WIND:
         address = MODBUS_ADDR_WIND;
         break;
-    case UART3_RX_MARK:
-        address = UART3_MASTER_ADDR;
+    case DATA_FROM_RAIN:
+        address = MODBUS_ADDR_RAIN;
+        break;
+    case DATA_FROM_WATER:
+        address = MODBUS_ADDR_WATER;
         break;
     case DATA_FROM_TC:
         address = MODBUS_ADDR_TC;
@@ -163,8 +170,11 @@ bool main_message_issue(uint8_t *data, uint16_t data_len)
     case MODBUS_ADDR_WIND:
         data_mark = DATA_TO_WIND;
         break;
-    case UART3_MASTER_ADDR:
-        data_mark = UART3_TX_MARK;
+    case MODBUS_ADDR_RAIN:
+        data_mark = DATA_TO_RAIN;
+        break;
+    case MODBUS_ADDR_WATER:
+        data_mark = DATA_TO_WATER;
         break;
     case MODBUS_ADDR_TC:
         data_mark = DATA_TO_TC;
@@ -187,8 +197,11 @@ static bool message_send_by_mark(DATA_MARK_E data_mark, uint8_t *data, uint16_t 
     case DATA_TO_WIND:
         usart_id = BOARD_USART_WIND;
         break;
-    case UART3_TX_MARK:
+    case DATA_TO_RAIN:
         usart_id = BOARD_USART_RAIN;
+        break;
+    case DATA_TO_WATER:
+        usart_id = BOARD_USART_WATER;
         break;
     case DATA_TO_TC:
         usart_id = BOARD_USART_TC;
@@ -220,9 +233,14 @@ static bool wind_message_send(uint8_t *data, uint16_t data_len)
     return message_send(DATA_TO_WIND, data, data_len);
 }
 
-static bool uart3_message_send(uint8_t *data, uint16_t data_len)
+static bool rain_message_send(uint8_t *data, uint16_t data_len)
 {
-    return message_send(UART3_TX_MARK, data, data_len);
+    return message_send(DATA_TO_RAIN, data, data_len);
+}
+
+static bool water_message_send(uint8_t *data, uint16_t data_len)
+{
+    return message_send(DATA_TO_WATER, data, data_len);
 }
 
 static bool tc_message_send(uint8_t *data, uint16_t data_len)
@@ -235,9 +253,14 @@ static bool wind_message_issue(uint8_t *data, uint16_t data_len)
     return slave_message_issue(DATA_FROM_WIND, data, data_len);
 }
 
-static bool uart3_message_issue(uint8_t *data, uint16_t data_len)
+static bool rain_message_issue(uint8_t *data, uint16_t data_len)
 {
-    return slave_message_issue(UART3_RX_MARK, data, data_len);
+    return slave_message_issue(DATA_FROM_RAIN, data, data_len);
+}
+
+static bool water_message_issue(uint8_t *data, uint16_t data_len)
+{
+    return slave_message_issue(DATA_FROM_WATER, data, data_len);
 }
 
 static bool tc_message_issue(uint8_t *data, uint16_t data_len)
@@ -254,11 +277,13 @@ node_consume_func_t node_consume_func[DATA_MARK_CNT] =
 {
     [DATA_TO_MAIN] = { main_message_send },
     [DATA_TO_WIND] = { wind_message_send },
-    [UART3_TX_MARK] = { uart3_message_send },
+    [DATA_TO_RAIN] = { rain_message_send },
+    [DATA_TO_WATER] = { water_message_send },
     [DATA_TO_TC] = { tc_message_send },
     [DATA_FROM_MAIN] = { main_message_issue },
     [DATA_FROM_WIND] = { wind_message_issue },
-    [UART3_RX_MARK] = { uart3_message_issue },
+    [DATA_FROM_RAIN] = { rain_message_issue },
+    [DATA_FROM_WATER] = { water_message_issue },
     [DATA_FROM_TC] = { tc_message_issue },
 };
 

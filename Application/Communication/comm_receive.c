@@ -31,7 +31,8 @@ typedef struct
 static rx_channel_t channels[] = {
     {.usart_id = BOARD_USART_TC, .data_mark = DATA_FROM_TC},
     {.usart_id = BOARD_USART_WIND, .data_mark = DATA_FROM_WIND},
-    {.usart_id = BOARD_USART_RAIN, .data_mark = UART3_RX_MARK},
+    {.usart_id = BOARD_USART_RAIN, .data_mark = DATA_FROM_RAIN},
+    {.usart_id = BOARD_USART_WATER, .data_mark = DATA_FROM_WATER},
 };
 static volatile uint32_t invalid_frames;
 
@@ -155,12 +156,16 @@ static void rx_frame_submit(DATA_MARK_E data_mark, const uint8_t *data, uint16_t
 {
     my_message_node_t node;
     bool submitted = false;
-    comm_log_frame(data_mark, data, length);
-    if (length < 4U || length > MY_MESSAGE_DATA_SIZE || modbus_rtu_crc16(data, length) != 0U)
+    /* Filter master-side addresses; downstream sensors reply at address 1. */
+    if (length < 4U || length > MY_MESSAGE_DATA_SIZE ||
+        (data_mark == DATA_FROM_MAIN &&
+         !((data[0] >= 2U && data[0] <= 5U) || data[0] == 0xB4U)) ||
+        modbus_rtu_crc16(data, length) != 0U)
     {
         invalid_frames++;
         return;
     }
+    comm_log_frame(data_mark, data, length);
     do
     {
         node.data = pvPortMalloc(length);
