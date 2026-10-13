@@ -24,7 +24,11 @@ typedef enum {
     MODBUS_DEV_XM8189_WIND,      /**< XM8189 风速风向传感器              */
     MODBUS_DEV_XM8537_WATER,     /**< XM8537 水浸传感器                  */
     MODBUS_DEV_XM9505_RAIN,      /**< XM9505 雨量传感器                  */
-    MODBUS_DEV_COUNT,            /**< 设备类型数量                       */
+    MODBUS_DEV_MACHINE_EXTEND,   /**< 整机推出：仅万融 4X-2000 命令 */
+    MODBUS_DEV_POLE_RAISE,       /**< 立杆升起：仅万融 4X-2000 命令 */
+    MODBUS_DEV_SOLAR_UNFOLD,     /**< 太阳板展开：仅万融 4X-2000 命令 */
+    MODBUS_DEV_TIS,
+    MODBUS_DEV_COUNT,            /**< 设备实例数量 */
 } modbus_dev_type_t;
 
 /** @brief 主站请求类型，描述请求/响应形态 */
@@ -33,6 +37,7 @@ typedef enum {
     MODBUS_REQ_READ_BITS,        /**< 读位响应：slave func byte_count data crc     */
     MODBUS_REQ_WRITE_COIL,       /**< 写单线圈响应：固定 8 字节回显              */
     MODBUS_REQ_WRITE_REG,        /**< 写单寄存器响应：固定 8 字节回显            */
+    MODBUS_REQ_WRITE_REGS,       /**< 写多个寄存器：回显起始地址和数量 */
     MODBUS_REQ_COUNT,            /**< 请求类型数量                              */
 } modbus_req_type_t;
 

@@ -79,6 +79,7 @@ uint32_t modbus_rtu_build_read_request(uint8_t addr, uint8_t function, uint16_t 
         }
         break;
     case MODBUS_FC_READ_HOLDING_REGS:
+    case MODBUS_FC_READ_INPUT_REGS:
         if (count > MODBUS_RTU_MAX_REG_COUNT) {
             return 0U;
         }
@@ -234,7 +235,7 @@ modbus_rtu_status_t modbus_rtu_parse_read_bits_response(const uint8_t *frame, ui
     return MODBUS_RTU_OK;
 }
 
-modbus_rtu_status_t modbus_rtu_parse_write_single_response(const uint8_t *frame, uint32_t len,
+static modbus_rtu_status_t modbus_rtu_parse_write_echo(const uint8_t *frame, uint32_t len,
     uint8_t expect_addr, uint8_t expect_function, uint16_t expect_reg, uint16_t expect_value)
 {
     uint16_t reg;
@@ -255,10 +256,6 @@ modbus_rtu_status_t modbus_rtu_parse_write_single_response(const uint8_t *frame,
     if (frame[1] != expect_function) {
         return ((frame[1] & 0x80U) != 0U) ? MODBUS_RTU_ERR_EXCEPTION : MODBUS_RTU_ERR_FUNC;
     }
-    if ((expect_function != MODBUS_FC_WRITE_SINGLE_COIL) && (expect_function != MODBUS_FC_WRITE_SINGLE_REG)) {
-        return MODBUS_RTU_ERR_FUNC;
-    }
-
     reg = modbus_rtu_get_u16_be(&frame[2]);
     value = modbus_rtu_get_u16_be(&frame[4]);
     if ((reg != expect_reg) || (value != expect_value)) {
@@ -266,4 +263,43 @@ modbus_rtu_status_t modbus_rtu_parse_write_single_response(const uint8_t *frame,
     }
 
     return MODBUS_RTU_OK;
+}
+
+modbus_rtu_status_t modbus_rtu_parse_write_single_response(const uint8_t *frame, uint32_t len,
+    uint8_t expect_addr, uint8_t expect_function, uint16_t expect_reg, uint16_t expect_value)
+{
+    if ((expect_function != MODBUS_FC_WRITE_SINGLE_COIL) && (expect_function != MODBUS_FC_WRITE_SINGLE_REG)) {
+        return MODBUS_RTU_ERR_FUNC;
+    }
+    return modbus_rtu_parse_write_echo(frame, len, expect_addr, expect_function, expect_reg, expect_value);
+}
+
+uint32_t modbus_rtu_build_write_regs_request(uint8_t addr, uint16_t start_reg,
+    const uint16_t *values, uint16_t count, uint8_t *out, uint32_t out_size)
+{
+    uint32_t length = 9U + (uint32_t)count * 2U;
+
+    if ((out == 0) || (values == 0) || (count == 0U) || (count > 123U) ||
+        (out_size < length) || ((uint32_t)start_reg + count > 0x10000UL)) {
+        return 0U;
+    }
+    out[0] = addr;
+    out[1] = MODBUS_FC_WRITE_MULTIPLE_REGS;
+    modbus_rtu_put_u16_be(out + 2, start_reg);
+    modbus_rtu_put_u16_be(out + 4, count);
+    out[6] = (uint8_t)(count * 2U);
+    for (uint16_t i = 0; i < count; i++) {
+        modbus_rtu_put_u16_be(out + 7U + 2U * i, values[i]);
+    }
+    modbus_rtu_append_crc(out, length - 2U);
+    return length;
+}
+
+modbus_rtu_status_t modbus_rtu_parse_write_regs_response(const uint8_t *frame, uint32_t len,
+    uint8_t expect_addr, uint16_t start_reg, uint16_t count)
+{
+    if ((count == 0U) || (count > 123U) || ((uint32_t)start_reg + count > 0x10000UL)) {
+        return MODBUS_RTU_ERR_PARAM;
+    }
+    return modbus_rtu_parse_write_echo(frame, len, expect_addr, MODBUS_FC_WRITE_MULTIPLE_REGS, start_reg, count);
 }

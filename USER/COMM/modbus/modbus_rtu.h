@@ -18,8 +18,10 @@ extern "C" {
 
 #define MODBUS_FC_READ_COILS            0x01U
 #define MODBUS_FC_READ_HOLDING_REGS     0x03U
+#define MODBUS_FC_READ_INPUT_REGS       0x04U
 #define MODBUS_FC_WRITE_SINGLE_COIL     0x05U
 #define MODBUS_FC_WRITE_SINGLE_REG      0x06U
+#define MODBUS_FC_WRITE_MULTIPLE_REGS   0x10U
 
 typedef enum {
     MODBUS_RTU_OK = 0,
@@ -49,6 +51,10 @@ void modbus_rtu_put_u16_be(uint8_t *data, uint16_t value);
 uint32_t modbus_rtu_build_read_request(uint8_t addr, uint8_t function, uint16_t start_reg, uint16_t count, uint8_t *out, uint32_t out_size);
 uint32_t modbus_rtu_build_write_single_request(uint8_t addr, uint8_t function,
     uint16_t reg, uint16_t value, uint8_t *out, uint32_t out_size);
+uint32_t modbus_rtu_build_write_regs_request(uint8_t addr, uint16_t start_reg,
+    const uint16_t *values, uint16_t count, uint8_t *out, uint32_t out_size);
+modbus_rtu_status_t modbus_rtu_parse_write_regs_response(const uint8_t *frame, uint32_t len,
+    uint8_t expect_addr, uint16_t start_reg, uint16_t count);
 
 /* 校验异常响应；匹配时将从机异常写入 exception。 */
 modbus_rtu_status_t modbus_rtu_parse_exception(const uint8_t *frame, uint32_t len,

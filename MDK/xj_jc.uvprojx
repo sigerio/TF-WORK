@@ -10,7 +10,7 @@
       <TargetName>XJ</TargetName>
       <ToolsetNumber>0x4</ToolsetNumber>
       <ToolsetName>ARM-ADS</ToolsetName>
-      <pCCUsed>5060960::V5.06 update 7 (build 960)::.\ARM_Compiler_5.06u7</pCCUsed>
+      <pCCUsed>5060960::V5.06 update 7 (build 960)::D:\MyProg\MDK\ARM\ARM_Compiler_5.06u7</pCCUsed>
       <uAC6>0</uAC6>
       <TargetOption>
         <TargetCommonOption>
@@ -804,6 +804,26 @@
         <Group>
           <GroupName>USER/COMM/modbus/devices</GroupName>
           <Files>
+            <File>
+              <FileName>modbus_wanrong.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\USER\COMM\modbus\devices\modbus_wanrong.c</FilePath>
+            </File>
+            <File>
+              <FileName>modbus_wanrong.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\USER\COMM\modbus\devices\modbus_wanrong.h</FilePath>
+            </File>
+            <File>
+              <FileName>modbus_tis.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\USER\COMM\modbus\devices\modbus_tis.c</FilePath>
+            </File>
+            <File>
+              <FileName>modbus_tis.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\USER\COMM\modbus\devices\modbus_tis.h</FilePath>
+            </File>
             <File>
               <FileName>modbus_weather.c</FileName>
               <FileType>1</FileType>

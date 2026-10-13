@@ -54,7 +54,7 @@ typedef enum {
     BOARD_PIN_UART4_TX,        /* PC12 - 无刷电机485 */
     BOARD_PIN_UART4_RX,        /* PD2  - 无刷电机485 */
     /* ---- 灯带 SPI0 ---- */
-    BOARD_PIN_SPI0_SCK,        /* PA5  - SPI0 时钟，与平台收回反馈分时复用 */
+    BOARD_PIN_SPI0_SCK,        /* PA5  - SPI0 时钟 */
     BOARD_PIN_SPI0_MOSI,       /* PA7  - SPI0 数据，接 WS2812 */
     /* ---- 485 方向控制 (拉高发送/拉低接收, 默认拉低) ---- */
     BOARD_PIN_RS485_WEATHER_DIR,   /* PA8  - 气象板 */
@@ -68,8 +68,8 @@ typedef enum {
     BOARD_PIN_PLATFORM_EXTEND_PWM,  /* PA0 - 电机负 T1_CH0。 */
     BOARD_PIN_PLATFORM_RETRACT_PWM, /* PA1 - 电机正 T1_CH1。 */
     /* ---- 平台到位/限位信号 (读低触发) ---- */
-    BOARD_PIN_PLATFORM_EXTEND_SIGNAL,    /* PA4  - 推出到位信号 */
-    BOARD_PIN_PLATFORM_RETRACT_SIGNAL,   /* PA5  - 收回到位信号 */
+    // BOARD_PIN_PLATFORM_EXTEND_SIGNAL,    /* PA4  - 推出到位信号 */
+    // BOARD_PIN_PLATFORM_RETRACT_SIGNAL,   /* PA5  - 收回到位信号 */
     BOARD_PIN_PLATFORM_EXTEND_LIMIT,     /* PB12 - 推出到位限位 */
     BOARD_PIN_PLATFORM_RETRACT_LIMIT,    /* PB13 - 收回到位限位 */
     /* ---- 门电机1 PWM ---- */
@@ -79,10 +79,10 @@ typedef enum {
     BOARD_PIN_DOOR2_EXTEND_PWM,   /* PB8 - 推出 T3_CH2 默认99% */
     BOARD_PIN_DOOR2_RETRACT_PWM,  /* PB9 - 收回 T3_CH3 默认99% */
     /* ---- 门电机到位信号 (读低触发) ---- */
-    BOARD_PIN_DOOR1_EXTEND_SIGNAL,   /* PC8 - 推出到位 */
-    BOARD_PIN_DOOR1_RETRACT_SIGNAL,  /* PC9 - 收回到位 */
-    BOARD_PIN_DOOR2_EXTEND_SIGNAL,   /* PC6 - 推出到位 */
-    BOARD_PIN_DOOR2_RETRACT_SIGNAL,  /* PC7 - 收回到位 */
+    // BOARD_PIN_DOOR1_EXTEND_SIGNAL,   /* PC8 - 推出到位 */
+    // BOARD_PIN_DOOR1_RETRACT_SIGNAL,  /* PC9 - 收回到位 */
+    // BOARD_PIN_DOOR2_EXTEND_SIGNAL,   /* PC6 - 推出到位 */
+    // BOARD_PIN_DOOR2_RETRACT_SIGNAL,  /* PC7 - 收回到位 */
     /* ---- 门限位信号 (读低触发) ---- */
     BOARD_PIN_DOOR_OPEN_LIMIT,       /* PB15 - 开到位限位 */
     BOARD_PIN_DOOR_CLOSE_LIMIT,      /* PB14 - 关到位限位 */

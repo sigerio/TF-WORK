@@ -12,6 +12,10 @@ typedef struct {
     xm8537_water_data_t xm8537;
     xm9505_rain_data_t xm9505;
     ac_device_t ac;
+    tis_device_t tis;
+    bool machine_extend_online;
+    bool pole_raise_online;
+    bool solar_unfold_online;
 } modbus_data_cache_t;
 
 static modbus_data_cache_t device_cache = {
@@ -20,6 +24,7 @@ static modbus_data_cache_t device_cache = {
     .xm8537 = { .slave_addr = MODULE_MODBUS_XM8537_ADDR },
     .xm9505 = { .slave_addr = MODULE_MODBUS_XM9505_ADDR },
     .ac = { .slave_addr = MODULE_MODBUS_AC_ADDR },
+    .tis = { .slave_addr = MODULE_MODBUS_TIS_ADDR },
 };
 
 typedef enum {
@@ -34,7 +39,7 @@ typedef enum {
     MODBUS_QUERY_AC_CONTROL,
     MODBUS_QUERY_AC_STATUS,
     MODBUS_QUERY_WEATHER_FAULT,
-    MODBUS_QUERY_STEP_COUNT,
+    MODBUS_QUERY_TIS_START,
 } modbus_poll_step_e;
 
 typedef uint32_t (*modbus_build_request_fn_t)(uint8_t slave_addr, uint16_t start_addr, uint16_t quantity, uint8_t *frame, uint32_t capacity);
@@ -49,6 +54,44 @@ typedef struct {
 } modbus_poll_entry_t;
 
 static uint32_t poll_step;
+
+/* USART0 的每段 TIS 读取之间安排气象读取；空调独立总线不能充当间隔。 */
+static const uint8_t poll_order[] = {
+    MODBUS_QUERY_XM7828, MODBUS_QUERY_TIS_START + 0,
+    MODBUS_QUERY_XM8189, MODBUS_QUERY_TIS_START + 1,
+    MODBUS_QUERY_XM8537, MODBUS_QUERY_TIS_START + 2,
+    MODBUS_QUERY_XM9505, MODBUS_QUERY_TIS_START + 3,
+    MODBUS_QUERY_XM7828_CALIBRATION, MODBUS_QUERY_TIS_START + 4,
+    MODBUS_QUERY_XM8189_CALIBRATION, MODBUS_QUERY_TIS_START + 5,
+    MODBUS_QUERY_AC_MEASURE, MODBUS_QUERY_AC_HUMIDITY,
+    MODBUS_QUERY_AC_CONTROL, MODBUS_QUERY_AC_STATUS, MODBUS_QUERY_WEATHER_FAULT,
+    MODBUS_QUERY_XM7828, MODBUS_QUERY_TIS_START + 6,
+    MODBUS_QUERY_XM8189, MODBUS_QUERY_TIS_START + 7,
+    MODBUS_QUERY_XM8537, MODBUS_QUERY_TIS_START + 8,
+    MODBUS_QUERY_XM9505, MODBUS_QUERY_TIS_START + 9,
+    MODBUS_QUERY_XM7828_CALIBRATION, MODBUS_QUERY_TIS_START + 10,
+    MODBUS_QUERY_XM8189_CALIBRATION, MODBUS_QUERY_TIS_START + 11,
+};
+
+/* 单次 <=16 寄存器，跳过空洞且不拆 L/H；电机没有周期请求。 */
+static const struct {
+    uint8_t function;
+    uint16_t start;
+    uint16_t count;
+} tis_poll_plan[] = {
+    {MODBUS_FC_READ_INPUT_REGS, 0x3100, 16},
+    {MODBUS_FC_READ_INPUT_REGS, 0x3110, 11},
+    {MODBUS_FC_READ_INPUT_REGS, 0x311D, 5},
+    {MODBUS_FC_READ_INPUT_REGS, 0x3200, 4},
+    {MODBUS_FC_READ_INPUT_REGS, 0x3205, 1},
+    {MODBUS_FC_READ_INPUT_REGS, 0x3300, 15},
+    {MODBUS_FC_READ_INPUT_REGS, 0x330F, 6},
+    {MODBUS_FC_READ_INPUT_REGS, 0x3400, 16},
+    {MODBUS_FC_READ_INPUT_REGS, 0x3410, 16},
+    {MODBUS_FC_READ_INPUT_REGS, 0x3420, 4},
+    {MODBUS_FC_READ_COILS, TIS_COIL_CHARGE, 1},
+    {MODBUS_FC_READ_COILS, TIS_COIL_MANUAL_OUTPUT, 1},
+};
 
 static const modbus_poll_entry_t poll_plan[MODBUS_QUERY_WEATHER_FAULT] = {
     [MODBUS_QUERY_XM7828] = { modbus_xm7828_build_read_request, &device_cache.xm7828.slave_addr,
@@ -81,6 +124,11 @@ void modbus_devices_init(void)
     memset(&device_cache.xm8537.status, 0, sizeof(device_cache.xm8537.status));
     memset(&device_cache.xm9505.status, 0, sizeof(device_cache.xm9505.status));
     memset(&device_cache.ac.status, 0, sizeof(device_cache.ac.status));
+    memset(&device_cache.tis, 0, sizeof(device_cache.tis));
+    device_cache.tis.slave_addr = MODULE_MODBUS_TIS_ADDR;
+    device_cache.machine_extend_online = false;
+    device_cache.pole_raise_online = false;
+    device_cache.solar_unfold_online = false;
     cancel_signal(OS_485_TH_ONLINE);
     cancel_signal(OS_485_WIND_ONLINE);
     cancel_signal(OS_485_WATER_ONLINE);
@@ -94,6 +142,18 @@ void modbus_devices_set_online(modbus_dev_type_t device, bool online)
     OS_RUN_SIGNAL_EN signal;
 
     switch (device) {
+    case MODBUS_DEV_MACHINE_EXTEND:
+        device_cache.machine_extend_online = online;
+        return;
+    case MODBUS_DEV_POLE_RAISE:
+        device_cache.pole_raise_online = online;
+        return;
+    case MODBUS_DEV_SOLAR_UNFOLD:
+        device_cache.solar_unfold_online = online;
+        return;
+    case MODBUS_DEV_TIS:
+        device_cache.tis.status.online = online;
+        return;
     case MODBUS_DEV_XM7828_TH:
         status = &device_cache.xm7828.status;
         signal = OS_485_TH_ONLINE;
@@ -206,6 +266,7 @@ static bool modbus_devices_enqueue(modbus_bus_t bus, modbus_dev_type_t device, c
     expect.start_addr = start_addr;
     switch (frame[1]) {
     case MODBUS_FC_READ_HOLDING_REGS:
+    case MODBUS_FC_READ_INPUT_REGS:
         expect.req_type = MODBUS_REQ_READ_REGS;
         expect.quantity = modbus_rtu_get_u16_be(&frame[4]);
         expect.rsp_data_bytes = (uint8_t)(expect.quantity * 2U);
@@ -222,6 +283,11 @@ static bool modbus_devices_enqueue(modbus_bus_t bus, modbus_dev_type_t device, c
         expect.echo_addr = modbus_rtu_get_u16_be(&frame[2]);
         expect.echo_value = modbus_rtu_get_u16_be(&frame[4]);
         break;
+    case MODBUS_FC_WRITE_MULTIPLE_REGS:
+        expect.req_type = MODBUS_REQ_WRITE_REGS;
+        expect.quantity = modbus_rtu_get_u16_be(&frame[4]);
+        expect.echo_addr = modbus_rtu_get_u16_be(&frame[2]);
+        break;
     default:
         return false;
     }
@@ -233,17 +299,23 @@ void modbus_devices_poll(void)
     const modbus_poll_entry_t *entry;
     uint8_t frame[MODBUS_RTU_REQUEST_LEN];
     uint32_t len;
+    const uint32_t step_count = sizeof(poll_order) / sizeof(poll_order[0]);
 
-    if (poll_step >= MODBUS_QUERY_STEP_COUNT) {
+    if (poll_step >= step_count) {
         poll_step = 0U;
     }
-    if (poll_step == MODBUS_QUERY_WEATHER_FAULT) {
-        poll_step = 0U;
+    uint8_t query = poll_order[poll_step];
+    poll_step = (poll_step + 1U) % step_count;
+    if (query == MODBUS_QUERY_WEATHER_FAULT) {
         modbus_master_repeat_weather_fault();
         return;
     }
-    entry = &poll_plan[poll_step];
-    poll_step = (poll_step + 1U) % MODBUS_QUERY_STEP_COUNT;
+    if (query >= MODBUS_QUERY_TIS_START) {
+        uint32_t index = query - MODBUS_QUERY_TIS_START;
+        (void)modbus_tis_queue_read(tis_poll_plan[index].function, tis_poll_plan[index].start, tis_poll_plan[index].count);
+        return;
+    }
+    entry = &poll_plan[query];
     len = entry->build_request(*entry->slave_addr, entry->start_addr, entry->quantity, frame, sizeof(frame));
     (void)modbus_devices_enqueue(entry->bus, entry->device, frame, len, entry->start_addr);
 }
@@ -302,6 +374,53 @@ static void modbus_ac_update_fault(void)
 
     device_cache.ac.status.sensor_fault = (status->cabinet_sensor_fault || status->evaporator_sensor_fault ||
         status->condenser_sensor_fault || status->humidity_sensor_fault);
+}
+
+bool modbus_wanrong_queue_command(modbus_dev_type_t device, wanrong_command_e command)
+{
+    uint8_t address;
+    uint8_t frame[MODBUS_RTU_REQUEST_LEN];
+    uint32_t len;
+
+    switch (device) {
+    case MODBUS_DEV_MACHINE_EXTEND: address = MODULE_MODBUS_MACHINE_EXTEND_ADDR; break;
+    case MODBUS_DEV_POLE_RAISE: address = MODULE_MODBUS_POLE_RAISE_ADDR; break;
+    case MODBUS_DEV_SOLAR_UNFOLD: address = MODULE_MODBUS_SOLAR_UNFOLD_ADDR; break;
+    default: return false;
+    }
+    len = modbus_wanrong_build_command(address, command, frame, sizeof(frame));
+    return modbus_devices_enqueue(MODBUS_BUS_WEATHER, device, frame, len, WANRONG_REG_COMMAND);
+}
+
+bool modbus_tis_queue_read(uint8_t function, uint16_t start, uint16_t count)
+{
+    uint8_t frame[MODBUS_RTU_REQUEST_LEN];
+    uint32_t len = modbus_tis_build_read_request(MODULE_MODBUS_TIS_ADDR, function, start, count, frame, sizeof(frame));
+
+    return modbus_devices_enqueue(MODBUS_BUS_WEATHER, MODBUS_DEV_TIS, frame, len, start);
+}
+
+bool modbus_tis_queue_write_params(uint16_t start, const uint16_t *values, uint16_t count, uint16_t voltage_level)
+{
+    uint8_t frame[TIS_WRITE_FRAME_MAX];
+    uint32_t len = modbus_tis_build_write_params(MODULE_MODBUS_TIS_ADDR, start, values, count, voltage_level, frame, sizeof(frame));
+
+    return modbus_devices_enqueue(MODBUS_BUS_WEATHER, MODBUS_DEV_TIS, frame, len, start);
+}
+
+bool modbus_tis_queue_write_coil(uint16_t coil, bool on)
+{
+    uint8_t frame[MODBUS_RTU_REQUEST_LEN];
+    uint32_t len = modbus_tis_build_write_coil(MODULE_MODBUS_TIS_ADDR, coil, on, frame, sizeof(frame));
+
+    return modbus_devices_enqueue(MODBUS_BUS_WEATHER, MODBUS_DEV_TIS, frame, len, coil);
+}
+
+bool modbus_tis_get(tis_device_t *out)
+{
+    if (out == NULL) return false;
+    *out = device_cache.tis;
+    return true;
 }
 
 typedef modbus_rtu_status_t (*modbus_rsp_parse_fn_t)(const uint8_t *frame,
@@ -401,6 +520,29 @@ modbus_rtu_status_t modbus_devices_parse_response(const modbus_rsp_expect_t *exp
 
     if (((uint32_t)expect->dev_type >= (uint32_t)MODBUS_DEV_COUNT) || ((uint32_t)expect->req_type >= (uint32_t)MODBUS_REQ_COUNT)) {
         return MODBUS_RTU_ERR_FUNC;
+    }
+
+    switch (expect->dev_type) {
+    case MODBUS_DEV_MACHINE_EXTEND:
+    case MODBUS_DEV_POLE_RAISE:
+    case MODBUS_DEV_SOLAR_UNFOLD:
+        if (expect->req_type != MODBUS_REQ_WRITE_REG || expect->rsp_func != MODBUS_FC_WRITE_SINGLE_REG ||
+            expect->echo_addr != WANRONG_REG_COMMAND) return MODBUS_RTU_ERR_FUNC;
+        return modbus_wanrong_parse_ack(frame, len, expect->slave_addr, expect->echo_value);
+    case MODBUS_DEV_TIS:
+        switch (expect->req_type) {
+        case MODBUS_REQ_READ_REGS:
+        case MODBUS_REQ_READ_BITS:
+            return modbus_tis_parse_read(frame, len, expect->slave_addr, expect->rsp_func,
+                expect->start_addr, expect->quantity, &device_cache.tis);
+        case MODBUS_REQ_WRITE_REGS:
+            return modbus_rtu_parse_write_regs_response(frame, len, expect->slave_addr, expect->echo_addr, expect->quantity);
+        case MODBUS_REQ_WRITE_COIL:
+            return modbus_rtu_parse_write_single_response(frame, len, expect->slave_addr,
+                MODBUS_FC_WRITE_SINGLE_COIL, expect->echo_addr, expect->echo_value);
+        default: return MODBUS_RTU_ERR_FUNC;
+        }
+    default: break;
     }
 
     parse = response_parsers[expect->dev_type][expect->req_type];

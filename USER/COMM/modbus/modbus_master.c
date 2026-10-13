@@ -141,7 +141,7 @@ static bool modbus_req_is_read(modbus_req_type_t request_type)
 
 static bool modbus_req_is_write(modbus_req_type_t request_type)
 {
-    return (request_type == MODBUS_REQ_WRITE_COIL) || (request_type == MODBUS_REQ_WRITE_REG);
+    return (request_type == MODBUS_REQ_WRITE_COIL) || (request_type == MODBUS_REQ_WRITE_REG) || (request_type == MODBUS_REQ_WRITE_REGS);
 }
 
 bool modbus_master_init(void)
