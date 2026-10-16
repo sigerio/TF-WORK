@@ -6,16 +6,22 @@
 #include "task.h"
 #include <string.h>
 
-#define BOARD_USART1_DMA_RX_BUFFER_SIZE UART_FRAME_MAX_SIZE
-#define BOARD_USART1_DMA_TX_BUFFER_SIZE UART_FRAME_MAX_SIZE
+/* One extra byte distinguishes an oversized frame from a valid 256-byte prefix. */
+#define UART_DMA_RX_SIZE (UART_FRAME_MAX_SIZE + 1U)
 
-static uint8_t usart1_dma_rx_buffer[BOARD_USART1_DMA_RX_BUFFER_SIZE];
-/* ponytail: 主控保留一帧待取；主控改为流水发送时扩展为完整帧 FIFO。 */
-static uint8_t usart1_dma_rx_pending_buffer[UART_FRAME_MAX_SIZE];
-static volatile uint16_t usart1_dma_rx_pending_len;
-static volatile uint8_t usart1_dma_rx_pending_ready;
-static uint8_t usart1_dma_tx_buffer[BOARD_USART1_DMA_TX_BUFFER_SIZE];
-static volatile uint8_t usart1_dma_tx_busy;
+typedef struct {
+    uint8_t rx_buffer[UART_DMA_RX_SIZE];
+    /* ponytail: 一问一答，每路只保留一帧待取；流水发送时再扩展 FIFO。 */
+    uint8_t pending_buffer[UART_FRAME_MAX_SIZE];
+    volatile uint16_t pending_len;
+    volatile bool pending_ready;
+    bool rx_invalid;
+    uint8_t tx_buffer[UART_FRAME_MAX_SIZE];
+    volatile bool tx_busy;
+} uart_dma_t;
+
+/* Board IDs 0/1 are the two DMA ports: MT80 / MAIN. */
+static uart_dma_t uart_dma[2];
 static uint16_t usart_tx_end_us[BOARD_USART_COUNT];
 static bool usart_tx_wait_gap[BOARD_USART_COUNT];
 
@@ -32,9 +38,9 @@ static void board_usart_direction_set(const board_usart_config_t *config, FlagSt
     }
 }
 
-static void board_usart_main_dma_tx_init(void)
+static void board_usart_dma_tx_init(board_usart_id_e usart_id)
 {
-    const board_usart_config_t *usart_config = &board_usart_configs[BOARD_USART_MAIN];
+    const board_usart_config_t *usart_config = &board_usart_configs[usart_id];
     const board_dma_ref_t tx_dma_ref = usart_config->tx_dma;
     const board_dma_config_t *dma_config = &board_dma_configs[tx_dma_ref.dma];
     const board_dma_channel_config_t *dma_channel_config = BOARD_DMA_CH(tx_dma_ref);
@@ -44,7 +50,7 @@ static void board_usart_main_dma_tx_init(void)
     dma_deinit(dma_config->controller, dma_channel_config->channel);
     dma_struct_para_init(&dma_init_struct);
     dma_init_struct.direction = dma_channel_config->direction;
-    dma_init_struct.memory_addr = (uint32_t)usart1_dma_tx_buffer;
+    dma_init_struct.memory_addr = (uint32_t)uart_dma[usart_id].tx_buffer;
     dma_init_struct.memory_inc = DMA_MEMORY_INCREASE_ENABLE;
     dma_init_struct.memory_width = DMA_MEMORY_WIDTH_8BIT;
     dma_init_struct.number = 0U;
@@ -53,12 +59,12 @@ static void board_usart_main_dma_tx_init(void)
     dma_init_struct.periph_width = DMA_PERIPHERAL_WIDTH_8BIT;
     dma_init_struct.priority = DMA_PRIORITY_HIGH;
     dma_init(dma_config->controller, dma_channel_config->channel, &dma_init_struct);
-    usart1_dma_tx_busy = 0U;
+    uart_dma[usart_id].tx_busy = 0U;
 }
 
-void board_usart_main_dma_rx_init(void)
+static void board_usart_dma_rx_init(board_usart_id_e usart_id, IRQn_Type irqn)
 {
-    const board_usart_config_t *usart_config = &board_usart_configs[BOARD_USART_MAIN];
+    const board_usart_config_t *usart_config = &board_usart_configs[usart_id];
     const board_dma_ref_t rx_dma_ref = usart_config->rx_dma;
     const board_dma_config_t *dma_config = &board_dma_configs[rx_dma_ref.dma];
     const board_dma_channel_config_t *dma_channel_config = BOARD_DMA_CH(rx_dma_ref);
@@ -68,22 +74,24 @@ void board_usart_main_dma_rx_init(void)
     dma_deinit(dma_config->controller, dma_channel_config->channel);
     dma_struct_para_init(&dma_init_struct);
     dma_init_struct.direction = dma_channel_config->direction;
-    dma_init_struct.memory_addr = (uint32_t)usart1_dma_rx_buffer;
+    dma_init_struct.memory_addr = (uint32_t)uart_dma[usart_id].rx_buffer;
     dma_init_struct.memory_inc = DMA_MEMORY_INCREASE_ENABLE;
     dma_init_struct.memory_width = DMA_MEMORY_WIDTH_8BIT;
-    dma_init_struct.number = BOARD_USART1_DMA_RX_BUFFER_SIZE;
+    dma_init_struct.number = UART_DMA_RX_SIZE;
     dma_init_struct.periph_addr = dma_channel_config->peripheral_address;
     dma_init_struct.periph_inc = DMA_PERIPH_INCREASE_DISABLE;
     dma_init_struct.periph_width = DMA_PERIPHERAL_WIDTH_8BIT;
     dma_init_struct.priority = DMA_PRIORITY_HIGH;
     dma_init(dma_config->controller, dma_channel_config->channel, &dma_init_struct);
     dma_circulation_disable(dma_config->controller, dma_channel_config->channel);
-    usart1_dma_rx_pending_len = 0U;
-    usart1_dma_rx_pending_ready = 0U;
+    uart_dma[usart_id].pending_len = 0U;
+    uart_dma[usart_id].pending_ready = 0U;
     dma_channel_enable(dma_config->controller, dma_channel_config->channel);
     usart_dma_receive_config(usart_config->peripheral, USART_RECEIVE_DMA_ENABLE);
+    uart_dma[usart_id].rx_invalid = false;
+    usart_interrupt_enable(usart_config->peripheral, USART_INT_ERR);
     usart_interrupt_enable(usart_config->peripheral, USART_INT_IDLE);
-    nvic_irq_enable(USART1_IRQn, 5U, 0U);
+    nvic_irq_enable(irqn, 5U, 0U);
 }
 
 static bool board_usart_tx_ready(board_usart_id_e usart_id)
@@ -97,95 +105,112 @@ static bool board_usart_tx_ready(board_usart_id_e usart_id)
     return true;
 }
 
-bool board_usart_main_dma_send(const uint8_t *data, uint16_t data_len)
+static bool board_usart_dma_send(board_usart_id_e usart_id, const uint8_t *data, uint16_t data_len)
 {
-    const board_usart_config_t *usart_config = &board_usart_configs[BOARD_USART_MAIN];
+    const board_usart_config_t *usart_config = &board_usart_configs[usart_id];
     const board_dma_ref_t tx_dma_ref = usart_config->tx_dma;
     const board_dma_config_t *dma_config = &board_dma_configs[tx_dma_ref.dma];
     const board_dma_channel_config_t *dma_channel_config = BOARD_DMA_CH(tx_dma_ref);
 
-    board_usart_main_dma_tx_poll();
+    board_usart_dma_tx_poll(usart_id);
     if ((data == NULL) || (data_len == 0U) ||
-        (data_len > BOARD_USART1_DMA_TX_BUFFER_SIZE) ||
-        (usart1_dma_tx_busy != 0U) || !board_usart_tx_ready(BOARD_USART_MAIN)) {
+        (data_len > UART_FRAME_MAX_SIZE) ||
+        (uart_dma[usart_id].tx_busy != 0U) || !board_usart_tx_ready(usart_id)) {
         return false;
     }
 
-    memcpy(usart1_dma_tx_buffer, data, data_len);
-    usart_receive_config(USART1, USART_RECEIVE_DISABLE);
+    memcpy(uart_dma[usart_id].tx_buffer, data, data_len);
+    usart_receive_config(board_usart_configs[usart_id].peripheral, USART_RECEIVE_DISABLE);
     board_usart_direction_set(usart_config, SET);
     dma_channel_disable(dma_config->controller, dma_channel_config->channel);
     dma_interrupt_flag_clear(dma_config->controller, dma_channel_config->channel, DMA_INT_FLAG_G);
-    dma_memory_address_config(dma_config->controller, dma_channel_config->channel, (uint32_t)usart1_dma_tx_buffer);
+    dma_memory_address_config(dma_config->controller, dma_channel_config->channel, (uint32_t)uart_dma[usart_id].tx_buffer);
     dma_transfer_number_config(dma_config->controller, dma_channel_config->channel, data_len);
     usart_interrupt_disable(usart_config->peripheral, USART_INT_TC);
     usart_flag_clear(usart_config->peripheral, USART_FLAG_TC);
     /* Publish busy only after DMA count and TC are ready for completion polling. */
-    usart1_dma_tx_busy = 1U;
+    uart_dma[usart_id].tx_busy = 1U;
     usart_dma_transmit_config(usart_config->peripheral, USART_TRANSMIT_DMA_ENABLE);
     dma_channel_enable(dma_config->controller, dma_channel_config->channel);
-    usart_interrupt_enable(USART1, USART_INT_TC);
+    usart_interrupt_enable(board_usart_configs[usart_id].peripheral, USART_INT_TC);
     return true;
 }
 
-void board_usart_main_dma_rx_idle_irq_handler(void)
+void board_usart_dma_rx_idle_irq_handler(board_usart_id_e usart_id)
 {
-    const board_dma_ref_t ref = board_usart_configs[BOARD_USART_MAIN].rx_dma;
+    if (usart_id != BOARD_USART_MT80 && usart_id != BOARD_USART_MAIN) {
+        return;
+    }
+    const board_dma_ref_t ref = board_usart_configs[usart_id].rx_dma;
     const board_dma_config_t *config = &board_dma_configs[ref.dma];
     dma_channel_enum channel = BOARD_DMA_CH(ref)->channel;
     uint16_t remaining;
     uint16_t length;
 
-    if (RESET == usart_interrupt_flag_get(USART1, USART_INT_FLAG_IDLE)) {
+    uint32_t peripheral = board_usart_configs[usart_id].peripheral;
+    uint32_t status = USART_STAT(peripheral);
+    if ((status & (USART_STAT_ORERR | USART_STAT_NERR | USART_STAT_FERR | USART_STAT_PERR)) != 0U) {
+        uart_dma[usart_id].rx_invalid = true;
+    }
+    if ((status & USART_STAT_IDLEF) == 0U) {
+        if (uart_dma[usart_id].rx_invalid) {
+            (void)usart_data_receive(peripheral);
+        }
         return;
     }
 
-    usart_data_receive(USART1);
-    remaining = (uint16_t)dma_transfer_number_get(config->controller, channel);
-    length = BOARD_USART1_DMA_RX_BUFFER_SIZE - remaining;
-    if (length != 0U && usart1_dma_rx_pending_ready == 0U) {
-        memcpy(usart1_dma_rx_pending_buffer, usart1_dma_rx_buffer, length);
-        usart1_dma_rx_pending_len = length;
-        usart1_dma_rx_pending_ready = 1U;
-    }
+    (void)usart_data_receive(peripheral);
     dma_channel_disable(config->controller, channel);
-    dma_memory_address_config(config->controller, channel, (uint32_t)usart1_dma_rx_buffer);
-    dma_transfer_number_config(config->controller, channel, BOARD_USART1_DMA_RX_BUFFER_SIZE);
+    remaining = (uint16_t)dma_transfer_number_get(config->controller, channel);
+    length = UART_DMA_RX_SIZE - remaining;
+    if (!uart_dma[usart_id].rx_invalid && length != 0U &&
+        length <= UART_FRAME_MAX_SIZE && !uart_dma[usart_id].pending_ready) {
+        memcpy(uart_dma[usart_id].pending_buffer, uart_dma[usart_id].rx_buffer, length);
+        uart_dma[usart_id].pending_len = length;
+        uart_dma[usart_id].pending_ready = 1U;
+    }
+    uart_dma[usart_id].rx_invalid = false;
+    dma_memory_address_config(config->controller, channel, (uint32_t)uart_dma[usart_id].rx_buffer);
+    dma_transfer_number_config(config->controller, channel, UART_DMA_RX_SIZE);
     dma_channel_enable(config->controller, channel);
 }
 
-bool board_usart_main_dma_rx_fetch(uint8_t *data, uint16_t *data_len)
+bool board_usart_dma_rx_fetch(board_usart_id_e usart_id, uint8_t *data, uint16_t *data_len)
 {
     uint16_t pending_len;
 
-    if ((data == NULL) || (data_len == NULL)) {
+    if ((usart_id != BOARD_USART_MT80 && usart_id != BOARD_USART_MAIN) ||
+        (data == NULL) || (data_len == NULL)) {
         return false;
     }
 
     taskENTER_CRITICAL();
-    if ((usart1_dma_rx_pending_ready == 0U) || (usart1_dma_rx_pending_len == 0U)) {
+    if ((uart_dma[usart_id].pending_ready == 0U) || (uart_dma[usart_id].pending_len == 0U)) {
         taskEXIT_CRITICAL();
         return false;
     }
 
-    pending_len = usart1_dma_rx_pending_len;
-    memcpy(data, usart1_dma_rx_pending_buffer, pending_len);
-    usart1_dma_rx_pending_len = 0U;
-    usart1_dma_rx_pending_ready = 0U;
+    pending_len = uart_dma[usart_id].pending_len;
+    memcpy(data, uart_dma[usart_id].pending_buffer, pending_len);
+    uart_dma[usart_id].pending_len = 0U;
+    uart_dma[usart_id].pending_ready = 0U;
     taskEXIT_CRITICAL();
 
     *data_len = pending_len;
     return true;
 }
 
-void board_usart_main_dma_tx_poll(void)
+void board_usart_dma_tx_poll(board_usart_id_e usart_id)
 {
-    const board_usart_config_t *usart_config = &board_usart_configs[BOARD_USART_MAIN];
+    if (usart_id != BOARD_USART_MT80 && usart_id != BOARD_USART_MAIN) {
+        return;
+    }
+    const board_usart_config_t *usart_config = &board_usart_configs[usart_id];
     const board_dma_ref_t tx_dma_ref = usart_config->tx_dma;
     const board_dma_config_t *dma_config = &board_dma_configs[tx_dma_ref.dma];
     const board_dma_channel_config_t *dma_channel_config = BOARD_DMA_CH(tx_dma_ref);
 
-    if (usart1_dma_tx_busy == 0U) {
+    if (uart_dma[usart_id].tx_busy == 0U) {
         return;
     }
 
@@ -194,16 +219,16 @@ void board_usart_main_dma_tx_poll(void)
         return;
     }
 
-    usart_interrupt_disable(USART1, USART_INT_TC);
+    usart_interrupt_disable(board_usart_configs[usart_id].peripheral, USART_INT_TC);
     dma_channel_disable(dma_config->controller, dma_channel_config->channel);
     dma_interrupt_flag_clear(dma_config->controller, dma_channel_config->channel, DMA_INT_FLAG_G);
     usart_dma_transmit_config(usart_config->peripheral, USART_TRANSMIT_DMA_DISABLE);
     usart_flag_clear(usart_config->peripheral, USART_FLAG_TC);
     board_usart_direction_set(usart_config, RESET);
-    usart_receive_config(USART1, USART_RECEIVE_ENABLE);
-    usart_tx_end_us[BOARD_USART_MAIN] = board_comm_time_us();
-    usart_tx_wait_gap[BOARD_USART_MAIN] = true;
-    usart1_dma_tx_busy = 0U;
+    usart_receive_config(board_usart_configs[usart_id].peripheral, USART_RECEIVE_ENABLE);
+    usart_tx_end_us[usart_id] = board_comm_time_us();
+    usart_tx_wait_gap[usart_id] = true;
+    uart_dma[usart_id].tx_busy = 0U;
 }
 
 static void board_usart_init(board_usart_id_e usart_id, IRQn_Type irqn, uint8_t rx_irq_enable)
@@ -273,13 +298,16 @@ void board_comm_timer_irq_handler(void)
 
 void uart_transport_init(void)
 {
-    board_usart_init(BOARD_USART_TC, USART0_IRQn, 1U);
-    board_usart_init(BOARD_USART_MAIN, USART1_IRQn, 0U);
-    board_usart_main_dma_tx_init();
-    board_usart_main_dma_rx_init();
-    board_usart_init(BOARD_USART_WIND, USART2_IRQn, 1U);
-    board_usart_init(BOARD_USART_RAIN, UART3_IRQn, 1U);
     board_comm_timer_init();
+    board_usart_init(BOARD_USART_MT80, USART0_IRQn, 0U);
+    board_usart_dma_tx_init(BOARD_USART_MT80);
+    board_usart_dma_rx_init(BOARD_USART_MT80, USART0_IRQn);
+    board_usart_init(BOARD_USART_MAIN, USART1_IRQn, 0U);
+    board_usart_dma_tx_init(BOARD_USART_MAIN);
+    board_usart_dma_rx_init(BOARD_USART_MAIN, USART1_IRQn);
+    board_usart_init(BOARD_USART_MACHINE, USART2_IRQn, 1U);
+    board_usart_init(BOARD_USART_POLE, UART3_IRQn, 1U);
+    board_usart_init(BOARD_USART_SOLAR, UART4_IRQn, 1U);
 }
 
 #if defined(__CC_ARM)
@@ -319,8 +347,8 @@ bool board_usart_send(board_usart_id_e usart_id, const uint8_t *data, uint16_t d
         return false;
     }
 
-    if (usart_id == BOARD_USART_MAIN) {
-        return board_usart_main_dma_send(data, data_len);
+    if (usart_id == BOARD_USART_MAIN || usart_id == BOARD_USART_MT80) {
+        return board_usart_dma_send(usart_id, data, data_len);
     }
     if (!board_usart_tx_ready(usart_id)) {
         return false;

@@ -5,30 +5,20 @@
 #include <stdbool.h>
 #include <stddef.h>
 
-typedef enum
-{
-    
+typedef enum {
     DATA_TO_MAIN = 0,
-    DATA_TO_WIND,   //主站询问 2
-    DATA_TO_RAIN,   //主站询问 3
-    DATA_TO_WATER,  //主站询问 4
-    DATA_TO_TC,     //主站询问 5
-    DATA_TO_4G,
-
-
-
+    DATA_TO_MACHINE,
+    DATA_TO_POLE,
+    DATA_TO_SOLAR,
+    DATA_TO_MT80,
     DATA_FROM_MAIN,
-    DATA_FROM_WIND,  
-    DATA_FROM_RAIN,  
-    DATA_FROM_WATER,
-    DATA_FROM_TC,   
-    DATA_FROM_4G,
-
-
-    
+    DATA_FROM_MACHINE,
+    DATA_FROM_POLE,
+    DATA_FROM_SOLAR,
+    DATA_FROM_MT80,
     DATA_MARK_CNT,
     DATA_MARK_NONE = -1,
-}DATA_MARK_E;
+} DATA_MARK_E;
 
 #define MY_MESSAGE_DATA_SIZE 256U
 

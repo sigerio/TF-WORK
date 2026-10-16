@@ -125,18 +125,24 @@ void DebugMon_Handler(void)
 
 void USART0_IRQHandler(void)
 {
-    board_usart_rx_irq_handler(BOARD_USART_TC);
+    board_usart_dma_tx_poll(BOARD_USART_MT80);
+    board_usart_dma_rx_idle_irq_handler(BOARD_USART_MT80);
 }
 
 void UART3_IRQHandler(void)
 {
-    board_usart_rx_irq_handler(BOARD_USART_RAIN);
+    board_usart_rx_irq_handler(BOARD_USART_POLE);
+}
+
+void UART4_IRQHandler(void)
+{
+    board_usart_rx_irq_handler(BOARD_USART_SOLAR);
 }
 
 void USART1_IRQHandler(void)
 {
-    board_usart_main_dma_tx_poll();
-    board_usart_main_dma_rx_idle_irq_handler();
+    board_usart_dma_tx_poll(BOARD_USART_MAIN);
+    board_usart_dma_rx_idle_irq_handler(BOARD_USART_MAIN);
 }
 
 void TIMER2_IRQHandler(void)
@@ -146,7 +152,7 @@ void TIMER2_IRQHandler(void)
 
 void USART2_IRQHandler(void)
 {
-    board_usart_rx_irq_handler(BOARD_USART_WIND);
+    board_usart_rx_irq_handler(BOARD_USART_MACHINE);
 
 }
 

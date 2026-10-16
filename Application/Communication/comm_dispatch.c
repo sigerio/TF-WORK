@@ -8,46 +8,21 @@
 #include <string.h>
 
 #define MODBUS_FRAME_MIN_LEN     4U
-#define MODBUS_ADDR_SINGLE_SLAVE 1U
-#define MODBUS_ADDR_WIND         2U
-#define MODBUS_ADDR_TC           5U
-#define MODBUS_ADDR_WEATHER      0xB4U
-#define WEATHER_FAULT_FUNCTION   0x41U
-#define WEATHER_FAULT_FRAME_LEN  9U
-
-static weather_fault_u weather_fault;
-static bool weather_fault_received;
-
-bool weather_fault_get(weather_fault_u *fault)
+bool comm_address_allowed(DATA_MARK_E source, uint8_t address)
 {
-    bool received;
-
-    if (fault == NULL) {
+    switch (source) {
+    case DATA_FROM_MAIN:
+        return address == MODBUS_ADDR_MACHINE || address == MODBUS_ADDR_POLE ||
+               address == MODBUS_ADDR_SOLAR || address == MODBUS_ADDR_MT80;
+    case DATA_FROM_MACHINE:
+    case DATA_FROM_POLE:
+    case DATA_FROM_SOLAR:
+        return address == MODBUS_ADDR_SINGLE_SLAVE;
+    case DATA_FROM_MT80:
+        return address == MODBUS_ADDR_MT80_SLAVE;
+    default:
         return false;
     }
-    taskENTER_CRITICAL();
-    received = weather_fault_received;
-    if (received) {
-        *fault = weather_fault;
-    }
-    taskEXIT_CRITICAL();
-    return received;
-}
-
-static void weather_fault_receive(const uint8_t *data, uint16_t data_len)
-{
-    uint32_t raw;
-
-    if (data_len != WEATHER_FAULT_FRAME_LEN || data[1] != WEATHER_FAULT_FUNCTION ||
-        data[2] != sizeof(raw) || modbus_rtu_crc16(data, data_len) != 0U) {
-        return;
-    }
-    /* Both GD32 endpoints use little endian; payload starts at an unaligned address. */
-    memcpy(&raw, &data[3], sizeof(raw));
-    taskENTER_CRITICAL();
-    weather_fault.raw = raw;
-    weather_fault_received = true;
-    taskEXIT_CRITICAL();
 }
 
 void comm_log_frame(DATA_MARK_E data_mark, const uint8_t *data, uint16_t data_len)
@@ -65,13 +40,15 @@ void comm_log_frame(DATA_MARK_E data_mark, const uint8_t *data, uint16_t data_le
     }
     switch (data_mark) {
     case DATA_FROM_MAIN: label = "UART1 RX"; break;
-    case DATA_FROM_WIND: label = "UART2 RX"; break;
-    case UART3_RX_MARK: label = "UART3 RX"; break;
-    case DATA_FROM_TC: label = "UART0 RX"; break;
+    case DATA_FROM_MACHINE: label = "UART2 RX"; break;
+    case DATA_FROM_POLE: label = "UART3 RX"; break;
+    case DATA_FROM_SOLAR: label = "UART4 RX"; break;
+    case DATA_FROM_MT80: label = "UART0 RX"; break;
     case DATA_TO_MAIN: label = "UART1 TX"; break;
-    case DATA_TO_WIND: label = "UART2 TX"; break;
-    case UART3_TX_MARK: label = "UART3 TX"; break;
-    case DATA_TO_TC: label = "UART0 TX"; break;
+    case DATA_TO_MACHINE: label = "UART2 TX"; break;
+    case DATA_TO_POLE: label = "UART3 TX"; break;
+    case DATA_TO_SOLAR: label = "UART4 TX"; break;
+    case DATA_TO_MT80: label = "UART0 TX"; break;
     default: return;
     }
 
@@ -127,19 +104,22 @@ static bool slave_message_issue(DATA_MARK_E data_mark, uint8_t *data, uint16_t d
     uint8_t address;
 
     if ((data == NULL) || (data_len < MODBUS_FRAME_MIN_LEN) ||
-        (data[0] != MODBUS_ADDR_SINGLE_SLAVE)) {
+        !comm_address_allowed(data_mark, data[0])) {
         return true;
     }
 
     switch (data_mark) {
-    case DATA_FROM_WIND:
-        address = MODBUS_ADDR_WIND;
+    case DATA_FROM_MACHINE:
+        address = MODBUS_ADDR_MACHINE;
         break;
-    case UART3_RX_MARK:
-        address = UART3_MASTER_ADDR;
+    case DATA_FROM_POLE:
+        address = MODBUS_ADDR_POLE;
         break;
-    case DATA_FROM_TC:
-        address = MODBUS_ADDR_TC;
+    case DATA_FROM_SOLAR:
+        address = MODBUS_ADDR_SOLAR;
+        break;
+    case DATA_FROM_MT80:
+        address = MODBUS_ADDR_MT80;
         break;
     default:
         return true;
@@ -151,29 +131,31 @@ static bool slave_message_issue(DATA_MARK_E data_mark, uint8_t *data, uint16_t d
 bool main_message_issue(uint8_t *data, uint16_t data_len)
 {
     DATA_MARK_E data_mark;
+    uint8_t slave_address = MODBUS_ADDR_SINGLE_SLAVE;
 
     if ((data == NULL) || (data_len < MODBUS_FRAME_MIN_LEN)) {
         return true;
     }
 
     switch (data[0]) {
-    case MODBUS_ADDR_WEATHER:
-        weather_fault_receive(data, data_len);
-        return true; /* One-way local notification: no reply or forwarding. */
-    case MODBUS_ADDR_WIND:
-        data_mark = DATA_TO_WIND;
+    case MODBUS_ADDR_MACHINE:
+        data_mark = DATA_TO_MACHINE;
         break;
-    case UART3_MASTER_ADDR:
-        data_mark = UART3_TX_MARK;
+    case MODBUS_ADDR_POLE:
+        data_mark = DATA_TO_POLE;
         break;
-    case MODBUS_ADDR_TC:
-        data_mark = DATA_TO_TC;
+    case MODBUS_ADDR_SOLAR:
+        data_mark = DATA_TO_SOLAR;
+        break;
+    case MODBUS_ADDR_MT80:
+        data_mark = DATA_TO_MT80;
+        slave_address = MODBUS_ADDR_MT80_SLAVE;
         break;
     default:
         return true;
     }
 
-    return message_readdress(data_mark, MODBUS_ADDR_SINGLE_SLAVE, data, data_len);
+    return message_readdress(data_mark, slave_address, data, data_len);
 }
 
 static bool message_send_by_mark(DATA_MARK_E data_mark, uint8_t *data, uint16_t data_len)
@@ -184,16 +166,18 @@ static bool message_send_by_mark(DATA_MARK_E data_mark, uint8_t *data, uint16_t 
     case DATA_TO_MAIN:
         usart_id = BOARD_USART_MAIN;
         break;
-    case DATA_TO_WIND:
-        usart_id = BOARD_USART_WIND;
+    case DATA_TO_MACHINE:
+        usart_id = BOARD_USART_MACHINE;
         break;
-    case UART3_TX_MARK:
-        usart_id = BOARD_USART_RAIN;
+    case DATA_TO_POLE:
+        usart_id = BOARD_USART_POLE;
         break;
-    case DATA_TO_TC:
-        usart_id = BOARD_USART_TC;
+    case DATA_TO_SOLAR:
+        usart_id = BOARD_USART_SOLAR;
         break;
-    case DATA_TO_4G:
+    case DATA_TO_MT80:
+        usart_id = BOARD_USART_MT80;
+        break;
     default:
         return false;
     }
@@ -215,34 +199,44 @@ static bool main_message_send(uint8_t *data, uint16_t data_len)
     return message_send(DATA_TO_MAIN, data, data_len);
 }
 
-static bool wind_message_send(uint8_t *data, uint16_t data_len)
+static bool machine_message_send(uint8_t *data, uint16_t data_len)
 {
-    return message_send(DATA_TO_WIND, data, data_len);
+    return message_send(DATA_TO_MACHINE, data, data_len);
 }
 
-static bool uart3_message_send(uint8_t *data, uint16_t data_len)
+static bool pole_message_send(uint8_t *data, uint16_t data_len)
 {
-    return message_send(UART3_TX_MARK, data, data_len);
+    return message_send(DATA_TO_POLE, data, data_len);
 }
 
-static bool tc_message_send(uint8_t *data, uint16_t data_len)
+static bool mt80_message_send(uint8_t *data, uint16_t data_len)
 {
-    return message_send(DATA_TO_TC, data, data_len);
+    return message_send(DATA_TO_MT80, data, data_len);
 }
 
-static bool wind_message_issue(uint8_t *data, uint16_t data_len)
+static bool machine_message_issue(uint8_t *data, uint16_t data_len)
 {
-    return slave_message_issue(DATA_FROM_WIND, data, data_len);
+    return slave_message_issue(DATA_FROM_MACHINE, data, data_len);
 }
 
-static bool uart3_message_issue(uint8_t *data, uint16_t data_len)
+static bool pole_message_issue(uint8_t *data, uint16_t data_len)
 {
-    return slave_message_issue(UART3_RX_MARK, data, data_len);
+    return slave_message_issue(DATA_FROM_POLE, data, data_len);
 }
 
-static bool tc_message_issue(uint8_t *data, uint16_t data_len)
+static bool mt80_message_issue(uint8_t *data, uint16_t data_len)
 {
-    return slave_message_issue(DATA_FROM_TC, data, data_len);
+    return slave_message_issue(DATA_FROM_MT80, data, data_len);
+}
+
+static bool solar_message_send(uint8_t *data, uint16_t data_len)
+{
+    return message_send(DATA_TO_SOLAR, data, data_len);
+}
+
+static bool solar_message_issue(uint8_t *data, uint16_t data_len)
+{
+    return slave_message_issue(DATA_FROM_SOLAR, data, data_len);
 }
 
 typedef struct
@@ -253,13 +247,15 @@ typedef struct
 node_consume_func_t node_consume_func[DATA_MARK_CNT] =
 {
     [DATA_TO_MAIN] = { main_message_send },
-    [DATA_TO_WIND] = { wind_message_send },
-    [UART3_TX_MARK] = { uart3_message_send },
-    [DATA_TO_TC] = { tc_message_send },
+    [DATA_TO_MACHINE] = { machine_message_send },
+    [DATA_TO_POLE] = { pole_message_send },
+    [DATA_TO_SOLAR] = { solar_message_send },
+    [DATA_TO_MT80] = { mt80_message_send },
     [DATA_FROM_MAIN] = { main_message_issue },
-    [DATA_FROM_WIND] = { wind_message_issue },
-    [UART3_RX_MARK] = { uart3_message_issue },
-    [DATA_FROM_TC] = { tc_message_issue },
+    [DATA_FROM_MACHINE] = { machine_message_issue },
+    [DATA_FROM_POLE] = { pole_message_issue },
+    [DATA_FROM_SOLAR] = { solar_message_issue },
+    [DATA_FROM_MT80] = { mt80_message_issue },
 };
 
 bool node_analyze(my_message_node_t node)

@@ -23,39 +23,29 @@
 #error BOARD_USART2_ROLE must select DEBUG, IEC104, or CHARGER
 #endif
 
-/*
- * 巡检机巢 底层 IO 拓扑配置
- *
- * 数据来源: datasheet/巡检机巢/IO拓扑.md
- * 本文件只描述硬件资源与引脚映射(拓扑), 不包含任何业务逻辑。
- *
- * 需要 JTAG 释放的引脚 (GPIO_SWJ_SWDPENABLE_REMAP, 关闭 JTAG 保留 SWD):
- *   PA15(空调485方向) PB3(无刷485方向)
- *
- * 说明:
- *   - 装饰灯带使用 SPI0 默认映射：PA5=SCK、PA7=MOSI。
- *     PA5 与平台收回到位检测分时复用：WS2812 DMA 发送期间为 SPI0_SCK，
- *     发送完成后恢复为平台检测输入；PB3 始终为 UART4 485 方向控制。
+/* 太阳能分发板：USART1 接主控（未来复用 4G），USART0 接 MT80，
+ * USART2/UART3/UART4 接三台电机。PA15 需关闭 JTAG、保留 SWD。
  */
 
 typedef enum {
     /* ---- 串口引脚 ---- */
-    BOARD_PIN_USART0_TX = 0,   /* PA9  - 温湿度485 */
-    BOARD_PIN_USART0_RX,       /* PA10 - 温湿度485 */
+    BOARD_PIN_USART0_TX = 0,   /* PA9  - MT80 485 */
+    BOARD_PIN_USART0_RX,       /* PA10 - MT80 485 */
     BOARD_PIN_USART1_TX,       /* PA2  - 主板通信 后续复用4G*/
     BOARD_PIN_USART1_RX,       /* PA3  - 主板通信 后续复用4G*/
-    BOARD_PIN_USART2_TX,       /* PB10 - 风速485 */
-    BOARD_PIN_USART2_RX,       /* PB11 - 风速485 */
-    BOARD_PIN_USART3_TX,       /* PC10 - 雨量485   当前复用 水浸485*/
-    BOARD_PIN_USART3_RX,       /* PC11 - 雨量485   当前复用 水浸485*/
-    // BOARD_PIN_UART4_TX,        /* PC12 - 水浸485 */
-    // BOARD_PIN_UART4_RX,        /* PD2  - 水浸485 */
+    BOARD_PIN_USART2_TX,       /* PB10 - 整机推出485 */
+    BOARD_PIN_USART2_RX,       /* PB11 - 整机推出485 */
+    BOARD_PIN_USART3_TX,       /* PC10 - 立杆升起485*/
+    BOARD_PIN_USART3_RX,       /* PC11 - 立杆升起485*/
+    BOARD_PIN_UART4_TX,        /* PC12 - 太阳板展开485 */
+    BOARD_PIN_UART4_RX,        /* PD2  - 太阳板展开485 */
     
     /* ---- 485 方向控制 (拉高发送/拉低接收, 默认拉低) ---- */
     BOARD_PIN_RS485_MAIN_DIR,      /* PA1  - 主板 */
-    BOARD_PIN_RS485_WIND_DIR,   /* PB2  - 风速 */
-    BOARD_PIN_RS485_RAIN_DIR,        /* PA15 - 雨量 */
-    BOARD_PIN_RS485_TC_DIR, /* PA8  - 温湿度 */
+    BOARD_PIN_RS485_MACHINE_DIR,   /* PB2  - 整机推出 */
+    BOARD_PIN_RS485_POLE_DIR,        /* PA15 - 立杆升起 */
+    BOARD_PIN_RS485_SOLAR_DIR, /* PB13 - 太阳板展开，实际接线待核对 */
+    BOARD_PIN_RS485_MT80_DIR, /* PA8  - MT80 */
 
     
     /* ---- 其它输出 (拉低触发, 默认拉高) ---- */
@@ -68,11 +58,11 @@ typedef enum {
 } board_pin_id_e;
 
 typedef enum {
-    BOARD_USART_TC = 0, /* USART0 - 温湿度485 */
+    BOARD_USART_MT80 = 0, /* USART0 - MT80 485 */
     BOARD_USART_MAIN,   /* USART1 - 主板通信 */
-    BOARD_USART_WIND,     /* USART2 - 风速通信 */
-    BOARD_USART_RAIN,          /* USART3 - 雨量485 */
-    // BOARD_USART_WATER,   /* UART4  - 水浸485 */
+    BOARD_USART_MACHINE,     /* USART2 - 整机推出 */
+    BOARD_USART_POLE,          /* UART3 - 立杆升起 */
+    BOARD_USART_SOLAR,   /* UART4 - 太阳板展开 */
     BOARD_USART_COUNT,
 } board_usart_id_e;
 

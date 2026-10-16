@@ -37,13 +37,13 @@ int SEGGER_RTT_printf(unsigned channel, const char *format, ...);
 #include <stdbool.h>
 #include <stdint.h>
 typedef enum {
-    BOARD_USART_TC, BOARD_USART_MAIN, BOARD_USART_WIND, BOARD_USART_RAIN, BOARD_USART_COUNT
+    BOARD_USART_MT80, BOARD_USART_MAIN, BOARD_USART_MACHINE, BOARD_USART_POLE, BOARD_USART_SOLAR, BOARD_USART_COUNT
 } board_usart_id_e;
 typedef struct { unsigned baudrate; } board_usart_config_t;
 extern const board_usart_config_t board_usart_configs[BOARD_USART_COUNT];
 uint16_t board_comm_time_us(void);
 uint16_t board_rtu_gap_us(board_usart_id_e port);
-bool board_usart_main_dma_rx_fetch(uint8_t *data, uint16_t *size);
+bool board_usart_dma_rx_fetch(board_usart_id_e port, uint8_t *data, uint16_t *size);
 bool board_usart_send(board_usart_id_e port, const uint8_t *data, uint16_t size);
 """,
 }
@@ -75,13 +75,13 @@ int SEGGER_RTT_printf(unsigned channel, const char *format, ...) {
 }
 
 const board_usart_config_t board_usart_configs[BOARD_USART_COUNT] = {
-    {9600}, {9600}, {9600}, {9600}
+    {115200}, {9600}, {9600}, {9600}, {9600}
 };
 static uint16_t mock_time;
 uint16_t board_comm_time_us(void) { return mock_time; }
 uint16_t board_rtu_gap_us(board_usart_id_e port) { (void)port; return 3646U + RX_TIMING_MARGIN_US; }
-bool board_usart_main_dma_rx_fetch(uint8_t *data, uint16_t *size) {
-    (void)data; (void)size; return false;
+bool board_usart_dma_rx_fetch(board_usart_id_e port, uint8_t *data, uint16_t *size) {
+    (void)port; (void)data; (void)size; return false;
 }
 
 QueueHandle_t main_queue;
@@ -141,7 +141,7 @@ void vTaskDelay(unsigned ticks) {
     }
 }
 bool board_usart_send(board_usart_id_e port, const uint8_t *data, uint16_t size) {
-    assert(data != NULL && size == 8U);
+    assert(data != NULL && size >= 4U && size <= 256U);
     if (!send_result) return false;
     sent_port = port; send_count++; return true;
 }
@@ -181,7 +181,7 @@ static void feed(board_usart_id_e port, const uint8_t *data, unsigned length) {
 }
 
 static void finish(void) {
-    mock_time = (uint16_t)(mock_time + board_rtu_gap_us(BOARD_USART_RAIN));
+    mock_time = (uint16_t)(mock_time + board_rtu_gap_us(BOARD_USART_POLE));
     board_usart_rx_tick(mock_time);
 }
 
@@ -191,9 +191,9 @@ static void check_receive(void) {
     uint8_t received[256];
     modbus_rtu_append_crc(frame, 5);
     rx_frame_init();
-    rx_channel_t *channel = rx_channel_find(BOARD_USART_RAIN);
+    rx_channel_t *channel = rx_channel_find(BOARD_USART_POLE);
     mock_time = 65000;
-    feed(BOARD_USART_RAIN, frame, sizeof(frame));
+    feed(BOARD_USART_POLE, frame, sizeof(frame));
     assert(rx_frame_read(channel, received) == 0);
     board_usart_rx_tick((uint16_t)(mock_time + channel->gap_us - 1U));
     assert(channel->count == 0);
@@ -204,18 +204,18 @@ static void check_receive(void) {
     queue_spaces = 1;
     unsigned previous_waits = waits;
     unsigned previous_logs = log_count;
-    rx_frame_submit(UART3_RX_MARK, received, sizeof(frame));
+    rx_frame_submit(DATA_FROM_POLE, received, sizeof(frame));
     assert(log_count == previous_logs + 1 && strstr(last_log, "UART3 RX len=7"));
     assert(waits > previous_waits && queue_count == previous + 1);
-    assert(queued.data_mark == UART3_RX_MARK && memcmp(queued.data, frame, sizeof(frame)) == 0);
+    assert(queued.data_mark == DATA_FROM_POLE && memcmp(queued.data, frame, sizeof(frame)) == 0);
     vPortFree(queued.data);
     received[4] ^= 1;
-    rx_frame_submit(UART3_RX_MARK, received, sizeof(frame));
+    rx_frame_submit(DATA_FROM_POLE, received, sizeof(frame));
     assert(log_count == previous_logs + 1);
     assert(queue_count == previous + 1 && invalid_frames == previous_invalid + 1);
 
     for (unsigned index = 0; index < RX_FRAME_SLOTS + 1; index++) {
-        feed(BOARD_USART_RAIN, frame, sizeof(frame));
+        feed(BOARD_USART_POLE, frame, sizeof(frame));
         finish();
     }
     assert(channel->count == RX_FRAME_SLOTS && channel->dropped == 1);
@@ -224,34 +224,34 @@ static void check_receive(void) {
         assert(memcmp(received, frame, sizeof(frame)) == 0);
     }
     for (unsigned index = 0; index < 180; index++) {
-        feed(BOARD_USART_RAIN, frame, sizeof(frame));
+        feed(BOARD_USART_POLE, frame, sizeof(frame));
         finish();
         assert(rx_frame_read(channel, received) == sizeof(frame));
         assert(memcmp(received, frame, sizeof(frame)) == 0);
     }
     memset(received, 0x55, sizeof(received));
     modbus_rtu_append_crc(received, 254);
-    feed(BOARD_USART_RAIN, received, sizeof(received));
+    feed(BOARD_USART_POLE, received, sizeof(received));
     finish();
     assert(rx_frame_read(channel, received) == 256 && modbus_rtu_crc16(received, 256) == 0);
-    feed(BOARD_USART_RAIN, received, sizeof(received));
-    feed(BOARD_USART_RAIN, frame, 1);
+    feed(BOARD_USART_POLE, received, sizeof(received));
+    feed(BOARD_USART_POLE, frame, 1);
     finish();
     assert(channel->count == 0 && channel->dropped == 2);
-    feed(BOARD_USART_RAIN, frame, 3);
+    feed(BOARD_USART_POLE, frame, 3);
     mock_time = (uint16_t)(mock_time + channel->byte_gap_us);
-    feed(BOARD_USART_RAIN, frame + 3, sizeof(frame) - 3);
+    feed(BOARD_USART_POLE, frame + 3, sizeof(frame) - 3);
     finish();
     assert(channel->count == 0 && channel->dropped == 3);
-    feed(BOARD_USART_RAIN, frame, sizeof(frame));
-    board_usart_rx_error(BOARD_USART_RAIN);
+    feed(BOARD_USART_POLE, frame, sizeof(frame));
+    board_usart_rx_error(BOARD_USART_POLE);
     finish();
     assert(channel->count == 0 && channel->dropped == 4);
     for (unsigned index = 0; index < sizeof(frame); index++) {
         mock_time = (uint16_t)(mock_time + 1042U);
-        board_usart_rx_byte(BOARD_USART_RAIN, frame[index]);
-        board_usart_rx_byte(BOARD_USART_WIND, frame[index]);
-        board_usart_rx_byte(BOARD_USART_TC, frame[index]);
+        board_usart_rx_byte(BOARD_USART_POLE, frame[index]);
+        board_usart_rx_byte(BOARD_USART_MACHINE, frame[index]);
+        board_usart_rx_byte(BOARD_USART_SOLAR, frame[index]);
     }
     finish();
     for (unsigned index = 0; index < sizeof(channels) / sizeof(channels[0]); index++) {
@@ -259,7 +259,7 @@ static void check_receive(void) {
         assert(memcmp(received, frame, sizeof(frame)) == 0);
     }
     for (unsigned index = 0; index < 5; index++) {
-        feed(BOARD_USART_RAIN, received, sizeof(received));
+        feed(BOARD_USART_POLE, received, sizeof(received));
         finish();
     }
     assert(channel->count == 4 && channel->dropped == 5);
@@ -272,12 +272,12 @@ static void check_receive(void) {
 static void check_logging(void) {
     uint8_t frame[MY_MESSAGE_DATA_SIZE] = {1, 3, 2, 0, 42};
     modbus_rtu_append_crc(frame, sizeof(frame) - 2);
-    const DATA_MARK_E marks[] = {DATA_FROM_TC, DATA_FROM_MAIN, DATA_FROM_WIND, UART3_RX_MARK,
-                                DATA_TO_TC, DATA_TO_MAIN, DATA_TO_WIND, UART3_TX_MARK};
+    const DATA_MARK_E marks[] = {DATA_FROM_MT80, DATA_FROM_MAIN, DATA_FROM_MACHINE, DATA_FROM_POLE, DATA_FROM_SOLAR,
+                                DATA_TO_MT80, DATA_TO_MAIN, DATA_TO_MACHINE, DATA_TO_POLE, DATA_TO_SOLAR};
     for (unsigned index = 0; index < sizeof(marks) / sizeof(marks[0]); index++) {
         char prefix[64];
         mock_ticks = index == 7 ? 0xffffffffU : 123456U + index;
-        snprintf(prefix, sizeof(prefix), "[%u ms] [UART%u %s len=256] ", mock_ticks, index % 4, index < 4 ? "RX" : "TX");
+        snprintf(prefix, sizeof(prefix), "[%u ms] [UART%u %s len=256] ", mock_ticks, index % 5, index < 5 ? "RX" : "TX");
         unsigned previous = log_count;
         comm_log_frame(marks[index], frame, sizeof(frame));
         assert(log_count == previous + 1 && strncmp(last_log, prefix, strlen(prefix)) == 0);
@@ -300,8 +300,8 @@ static void check_logging(void) {
     }
     assert(log_count == previous);
     previous = log_count;
-    comm_log_frame(DATA_FROM_WIND, frame, sizeof(frame));
-    comm_log_frame(DATA_TO_WIND, frame, sizeof(frame));
+    comm_log_frame(DATA_FROM_MACHINE, frame, sizeof(frame));
+    comm_log_frame(DATA_TO_MACHINE, frame, sizeof(frame));
     comm_log_frame(DATA_FROM_MAIN, NULL, 8);
     comm_log_frame(DATA_FROM_MAIN, frame, 0);
     comm_log_frame(DATA_FROM_MAIN, frame, MY_MESSAGE_DATA_SIZE + 1);
@@ -318,129 +318,112 @@ static void check_logging(void) {
     _SEGGER_RTT.aUp[0].WrOff = 0;
 }
 
-static void check_main_raw_receive(void) {
-    uint8_t frame[] = {99, 3, 0, 0, 0, 1, 0, 0};
-    const unsigned lengths[] = {1, 2, 3, sizeof(frame)};
-    modbus_rtu_append_crc(frame, 6);
-    unsigned previous_logs = log_count;
-    unsigned previous_queue = queue_count;
-    rx_frame_submit(DATA_FROM_MAIN, frame, sizeof(frame));
-    assert(log_count == previous_logs + 1 && strstr(last_log, "UART1 RX len=8"));
-    assert(queue_count == previous_queue + 1);
-    assert(queued.data_mark == DATA_FROM_MAIN && memcmp(queued.data, frame, sizeof(frame)) == 0);
-    assert(node_analyze(queued) && queue_count == previous_queue + 1);
-    vPortFree(queued.data);
-    frame[7] ^= 1;
-    previous_logs = log_count;
-    unsigned previous_invalid = invalid_frames;
-    for (unsigned index = 0; index < sizeof(lengths) / sizeof(lengths[0]); index++) {
-        rx_frame_submit(DATA_FROM_MAIN, frame, lengths[index]);
-        assert(log_count == previous_logs);
-        assert(invalid_frames == previous_invalid + index + 1);
-        assert(queue_count == previous_queue + 1 && allocations == 0);
+static void check_whitelist(void) {
+    uint8_t frame[] = {0, 6, 7, 0xD0, 0, 1, 0, 0};
+    const DATA_MARK_E sources[] = {DATA_FROM_MAIN, DATA_FROM_MACHINE, DATA_FROM_POLE,
+                                  DATA_FROM_SOLAR, DATA_FROM_MT80};
+    for (unsigned source = 0; source < 5; ++source) {
+        for (unsigned address = 0; address < 256; ++address) {
+            bool allowed = source == 0 ? address >= 0x11 && address <= 0x14 :
+                           address == (source == 4 ? 0x0A : 1);
+            frame[0] = address;
+            modbus_rtu_append_crc(frame, 6);
+            unsigned before = queue_count, logs = log_count;
+            rx_frame_submit(sources[source], frame, sizeof(frame));
+            assert(queue_count == before + allowed && log_count == logs + allowed);
+            assert(allocations == (unsigned)allowed);
+            if (allowed) vPortFree(queued.data);
+            else {
+                assert(node_analyze((my_message_node_t){frame, sizeof(frame), sources[source]}));
+                assert(queue_count == before);
+            }
+        }
     }
-    previous_logs = log_count;
-    assert(message_send(DATA_TO_MAIN, frame, sizeof(frame)));
-    assert(log_count == previous_logs);
+    /* A whole unknown-address frame must not expose a valid embedded request. */
+    uint8_t outer[12] = {0xB4, 0x41, 0x11, 6, 7, 0xD0, 0, 1};
+    modbus_rtu_append_crc(outer + 2, 6);
+    modbus_rtu_append_crc(outer, 10);
+    unsigned before = queue_count, logs = log_count;
+    rx_frame_submit(DATA_FROM_MAIN, outer, sizeof(outer));
+    assert(queue_count == before && log_count == logs && allocations == 0);
+    frame[0] = 0x11;
+    modbus_rtu_append_crc(frame, 6);
+    frame[7] ^= 1;
+    for (unsigned length = 0; length <= sizeof(frame); ++length) {
+        rx_frame_submit(DATA_FROM_MAIN, frame, length);
+        assert(queue_count == before && allocations == 0);
+    }
 }
 
+static void check_payloads(void) {
+    const uint8_t addresses[] = {0x11, 0x12, 0x13, 0x14};
+    const DATA_MARK_E sources[] = {DATA_FROM_MACHINE, DATA_FROM_POLE, DATA_FROM_SOLAR, DATA_FROM_MT80};
+    const DATA_MARK_E destinations[] = {DATA_TO_MACHINE, DATA_TO_POLE, DATA_TO_SOLAR, DATA_TO_MT80};
+    const board_usart_id_e ports[] = {BOARD_USART_MACHINE, BOARD_USART_POLE, BOARD_USART_SOLAR, BOARD_USART_MT80};
+    const uint8_t functions[] = {1, 3, 4, 5, 6, 0x10, 0x81, 0x83, 0x84, 0x85, 0x86, 0x90};
+    const unsigned lengths[] = {5, 7, 8, 11, 15, 37, 41, 256};
+    for (unsigned device = 0; device < 4; ++device) {
+        uint8_t slave_address = device == 3 ? 0x0A : 1;
+        check_route(addresses[device], DATA_FROM_MAIN, slave_address, destinations[device], ports[device]);
+        check_route(slave_address, sources[device], addresses[device], DATA_TO_MAIN, BOARD_USART_MAIN);
+        for (unsigned f = 0; f < sizeof(functions); ++f) {
+            for (unsigned n = 0; n < sizeof(lengths) / sizeof(lengths[0]); ++n) {
+                unsigned length = lengths[n];
+                for (unsigned response = 0; response < 2; ++response) {
+                    uint8_t frame[256];
+                    for (unsigned i = 0; i < length; ++i) frame[i] = (uint8_t)(i * 7U + device);
+                    frame[0] = response ? slave_address : addresses[device];
+                    frame[1] = functions[f];
+                    modbus_rtu_append_crc(frame, length - 2);
+                    rx_frame_submit(response ? sources[device] : DATA_FROM_MAIN, frame, length);
+                    my_message_node_t raw = queued;
+                    assert(memcmp(raw.data, frame, length) == 0);
+                    assert(node_analyze(raw));
+                    vPortFree(raw.data);
+                    assert(queued.data[0] == (response ? addresses[device] : slave_address));
+                    assert(queued.data_mark == (response ? DATA_TO_MAIN : destinations[device]));
+                    assert(queued.data_len == length && modbus_rtu_crc16(queued.data, length) == 0);
+                    assert(memcmp(queued.data + 1, frame + 1, length - 3) == 0);
+                    assert(node_analyze(queued));
+                    assert(sent_port == (response ? BOARD_USART_MAIN : ports[device]));
+                    vPortFree(queued.data);
+                    assert(allocations == 0);
+                }
+            }
+        }
+    }
+}
 
-static void check_weather_fault(void) {
-    uint8_t examples[][9] = {
-        {0xB4, 0x41, 4, 0, 0, 0, 0, 0x11, 0xDA},
-        {0xB4, 0x41, 4, 1, 0, 0, 0, 0x10, 0x26},
-        {0xB4, 0x41, 4, 0x78, 0x56, 0x34, 0x12, 0x7F, 0xA7}
-    };
-    const uint32_t values[] = {0, 1, 0x12345678};
-    weather_fault_u fault = {.raw = 0xDEADBEEF};
-    unsigned sent_before = send_count;
-    assert(sizeof(fault) == sizeof(uint32_t));
-    assert(!weather_fault_get(NULL));
-    assert(!weather_fault_get(&fault) && fault.raw == 0xDEADBEEF);
-    uint8_t malformed[10] = {0xB4, 0x41, 4};
-    assert(node_analyze((my_message_node_t){malformed, 9, DATA_FROM_MAIN}));
-    assert(!weather_fault_get(&fault));
-    for (unsigned index = 0; index < 3; ++index) {
-        unsigned previous = queue_count;
-        unsigned logs = log_count;
-        rx_frame_submit(DATA_FROM_MAIN, examples[index], 9);
-        assert(log_count == logs + 1 && strstr(last_log, "UART1 RX len=9"));
-        assert(queue_count == previous + 1 && allocations == 1);
+static void check_mt80_time_write(void) {
+    /* 17:30:30: three registers in seconds/minutes/hours order. */
+    uint8_t request[] = {0x14, 0x10, 0x96, 0x63, 0, 3, 6, 0, 0x1E, 0, 0x1E, 0, 0x11, 0, 0};
+    uint8_t response[] = {0x0A, 0x10, 0x96, 0x63, 0, 3, 0, 0};
+    uint8_t *frames[] = {request, response};
+    const unsigned lengths[] = {sizeof(request), sizeof(response)};
+    for (unsigned index = 0; index < 2; ++index) {
+        modbus_rtu_append_crc(frames[index], lengths[index] - 2);
+        unsigned before = queue_count;
+        rx_frame_submit(index ? DATA_FROM_MT80 : DATA_FROM_MAIN, frames[index], lengths[index]);
+        assert(queue_count == before + 1);
+        my_message_node_t raw = queued;
+        assert(node_analyze(raw));
+        vPortFree(raw.data);
+        assert(queued.data[0] == (index ? 0x14 : 0x0A));
+        assert(queued.data_len == lengths[index]);
+        assert(memcmp(queued.data + 1, frames[index] + 1, lengths[index] - 3) == 0);
+        assert(modbus_rtu_crc16(queued.data, queued.data_len) == 0);
         assert(node_analyze(queued));
-        assert(weather_fault_get(&fault) && fault.raw == values[index]);
-        assert(queue_count == previous + 1 && send_count == sent_before);
+        assert(sent_port == (index ? BOARD_USART_MAIN : BOARD_USART_MT80));
         vPortFree(queued.data);
-        assert(allocations == 0);
     }
-    /* Valid CRC but wrong function/count/address must preserve the snapshot. */
-    unsigned previous = queue_count;
-    for (unsigned field = 0; field < 3; ++field) {
-        memcpy(malformed, examples[0], 9);
-        malformed[field] ^= 1;
-        modbus_rtu_append_crc(malformed, 7);
-        assert(node_analyze((my_message_node_t){malformed, 9, DATA_FROM_MAIN}));
-        assert(weather_fault_get(&fault) && fault.raw == 0x12345678);
-    }
-    for (unsigned length = 1; length <= sizeof(malformed); ++length) {
-        if (length == 9) continue;
-        memcpy(malformed, examples[0], 9);
-        if (length >= 4) modbus_rtu_append_crc(malformed, length - 2);
-        assert(node_analyze((my_message_node_t){malformed, length, DATA_FROM_MAIN}));
-        assert(weather_fault_get(&fault) && fault.raw == 0x12345678);
-    }
-    memcpy(malformed, examples[0], 9);
-    malformed[8] ^= 1;
-    rx_frame_submit(DATA_FROM_MAIN, malformed, 9);
-    assert(node_analyze((my_message_node_t){malformed, 9, DATA_FROM_MAIN}));
-    assert(node_analyze((my_message_node_t){examples[0], 9, UART3_RX_MARK}));
-    assert(node_analyze((my_message_node_t){NULL, 9, DATA_FROM_MAIN}));
-    assert(weather_fault_get(&fault) && fault.raw == 0x12345678);
-    assert(queue_count == previous && send_count == sent_before && allocations == 0);
-    /* A later zero clears all faults; repeated notifications are harmless. */
-    for (unsigned repeat = 0; repeat < 2; ++repeat) {
-        assert(node_analyze((my_message_node_t){examples[0], 9, DATA_FROM_MAIN}));
-        assert(weather_fault_get(&fault) && fault.raw == 0);
-    }
-    assert(queue_count == previous && send_count == sent_before);
-    /* Verify the documented bit and severity layout. */
-#define CHECK_FAULT_BIT(name, bit) do { fault.raw = 1UL << (bit); assert(fault.bits.name == 1); } while (0)
-    CHECK_FAULT_BIT(emergency_stop, 0);
-    CHECK_FAULT_BIT(door_limit_conflict, 1);
-    CHECK_FAULT_BIT(platform_limit_conflict, 2);
-    CHECK_FAULT_BIT(water_detected, 3);
-    CHECK_FAULT_BIT(door_start_failed, 4);
-    CHECK_FAULT_BIT(platform_start_failed, 5);
-    CHECK_FAULT_BIT(ac_high_temp, 6);
-    CHECK_FAULT_BIT(ac_low_temp, 7);
-    CHECK_FAULT_BIT(ac_humidity_high, 8);
-    CHECK_FAULT_BIT(ac_condenser_high_pressure, 9);
-    CHECK_FAULT_BIT(ac_evaporator_freeze, 10);
-    CHECK_FAULT_BIT(ac_cooling_alarm, 11);
-    CHECK_FAULT_BIT(th_offline, 12);
-    CHECK_FAULT_BIT(wind_offline, 13);
-    CHECK_FAULT_BIT(water_offline, 14);
-    CHECK_FAULT_BIT(rain_offline, 15);
-    CHECK_FAULT_BIT(ac_offline, 16);
-    CHECK_FAULT_BIT(th_sensor_fault, 17);
-    CHECK_FAULT_BIT(wind_sensor_fault, 18);
-    CHECK_FAULT_BIT(water_sensor_fault, 19);
-    CHECK_FAULT_BIT(rain_sensor_fault, 20);
-    CHECK_FAULT_BIT(ac_cabinet_sensor_fault, 21);
-    CHECK_FAULT_BIT(ac_evaporator_sensor_fault, 22);
-    CHECK_FAULT_BIT(ac_condenser_sensor_fault, 23);
-    CHECK_FAULT_BIT(ac_humidity_sensor_fault, 24);
-#undef CHECK_FAULT_BIT
-    fault.raw = 0x0000000F;
-    assert(fault.levels.p1 == 15 && fault.levels.p2 == 0 && fault.levels.p3 == 0);
-    fault.raw = 0x00000FF0;
-    assert(fault.levels.p1 == 0 && fault.levels.p2 == 255 && fault.levels.p3 == 0);
-    fault.raw = 0x01FFF000;
-    assert(fault.levels.p1 == 0 && fault.levels.p2 == 0 && fault.levels.p3 == 8191);
+    assert(allocations == 0);
 }
 
 int main(void) {
     check_logging();
-    check_weather_fault();
+    check_whitelist();
+    check_payloads();
+    check_mt80_time_write();
     for (int mark = 0; mark < DATA_MARK_CNT; mark++) {
         node_consume_func_t saved = node_consume_func[mark];
         node_consume_func[mark].func = check_callback;
@@ -455,39 +438,11 @@ int main(void) {
     node_analyze((my_message_node_t){callback_data, sizeof(callback_data), DATA_MARK_CNT});
     assert(callback_count == DATA_MARK_CNT);
     assert(modbus_rtu_crc16((const uint8_t *)"123456789", 9) == 0x4B37);
-    check_route(UART3_MASTER_ADDR, DATA_FROM_MAIN, 1, UART3_TX_MARK, BOARD_USART_RAIN);
-    check_route(1, UART3_RX_MARK, UART3_MASTER_ADDR, DATA_TO_MAIN, BOARD_USART_MAIN);
-    check_route(2, DATA_FROM_MAIN, 1, DATA_TO_WIND, BOARD_USART_WIND);
-    check_route(1, DATA_FROM_WIND, 2, DATA_TO_MAIN, BOARD_USART_MAIN);
-    check_route(5, DATA_FROM_MAIN, 1, DATA_TO_TC, BOARD_USART_TC);
-    check_route(1, DATA_FROM_TC, 5, DATA_TO_MAIN, BOARD_USART_MAIN);
-
-    uint8_t frame[] = {UART3_MASTER_ADDR == 3 ? 4 : 3, 3, 0, 0, 0, 1, 0, 0};
+    uint8_t frame[] = {0x14, 3, 0, 0, 0, 1, 0, 0};
     modbus_rtu_append_crc(frame, 6);
     unsigned previous = queue_count;
-    node_analyze((my_message_node_t){frame, sizeof(frame), DATA_FROM_MAIN});
-    frame[0] = 1;
-    modbus_rtu_append_crc(frame, 6);
-    node_analyze((my_message_node_t){frame, sizeof(frame),
-                 UART3_RX_MARK == DATA_FROM_RAIN ? DATA_FROM_WATER : DATA_FROM_RAIN});
-    unsigned previous_send = send_count;
-    message_send(UART3_TX_MARK == DATA_TO_RAIN ? DATA_TO_WATER : DATA_TO_RAIN, frame, sizeof(frame));
-    assert(send_count == previous_send);
-    frame[0] = 2;
-    modbus_rtu_append_crc(frame, 6);
-    node_analyze((my_message_node_t){frame, sizeof(frame), UART3_RX_MARK});
-    frame[0] = UART3_MASTER_ADDR;
-    modbus_rtu_append_crc(frame, 6);
-    frame[7] ^= 1;
-    node_analyze((my_message_node_t){frame, sizeof(frame), DATA_FROM_MAIN});
-    frame[0] = 1;
-    modbus_rtu_append_crc(frame, 6);
-    frame[7] ^= 1;
-    node_analyze((my_message_node_t){frame, sizeof(frame), UART3_RX_MARK});
     node_analyze((my_message_node_t){NULL, 8, DATA_FROM_MAIN});
     node_analyze((my_message_node_t){frame, 3, DATA_FROM_MAIN});
-    frame[0] = UART3_MASTER_ADDR;
-    modbus_rtu_append_crc(frame, 6);
     node_analyze((my_message_node_t){frame, MY_MESSAGE_DATA_SIZE + 1, DATA_FROM_MAIN});
     queue_result = 0;
     assert(!node_analyze((my_message_node_t){frame, sizeof(frame), DATA_FROM_MAIN}));
@@ -504,7 +459,6 @@ int main(void) {
     assert(node_analyze((my_message_node_t){frame, sizeof(frame), DATA_TO_MAIN}));
     assert(log_count == previous_logs + 1 && strstr(last_log, "UART1 TX len=8"));
     check_receive();
-    check_main_raw_receive();
     task_node = (my_message_node_t){pvPortMalloc(8), 8, DATA_TO_MAIN};
     memset(task_node.data, 0, 8);
     send_result = false;
@@ -514,6 +468,7 @@ int main(void) {
     assert(task_peeks == 2 && task_receives == 1 && allocations == 0);
     return 0;
 }
+
 """
 
 
@@ -530,11 +485,6 @@ with tempfile.TemporaryDirectory() as temporary:
         str(ROOT / "Libraries/Modbus/modbus_crc.c"),
         "-o", str(directory / "check"),
     ]
-    for mode in (None, "UART3_DEVICE_RAIN", "UART3_DEVICE_WATER"):
-        flags = [] if mode is None else [f"-DUART3_DEVICE={mode}"]
-        subprocess.run(command + flags, check=True)
-        subprocess.run([str(directory / "check")], check=True)
-        print(f"PASS: {mode or 'default (water)'}")
-    invalid = subprocess.run(command + ["-DUART3_DEVICE=2"], capture_output=True, text=True)
-    assert invalid.returncode != 0 and "UART3_DEVICE must select" in invalid.stderr
-    print("PASS: invalid configuration rejected")
+    subprocess.run(command, check=True)
+    subprocess.run([str(directory / "check")], check=True, timeout=10)
+    print("PASS: four routes, full address whitelist, payload/CRC, exceptions, queues and RX framing")

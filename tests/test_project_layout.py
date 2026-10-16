@@ -5,11 +5,11 @@ import xml.etree.ElementTree as ET
 
 ROOT = Path(__file__).resolve().parents[1]
 MDK = ROOT / "MDK"
-project = ET.parse(MDK / "wether.uvprojx")
-options = ET.parse(MDK / "wether.uvoptx")
-ET.parse(MDK / "wether.uvguix.1")
+project = ET.parse(MDK / "sun_control.uvprojx")
+options = ET.parse(MDK / "sun_control.uvoptx")
+ET.parse(MDK / "sun_control.uvguix.1")
 
-for path in (MDK / "wether.uvprojx", MDK / "wether.uvoptx", MDK / "wether.uvguix.1"):
+for path in (MDK / "sun_control.uvprojx", MDK / "sun_control.uvoptx", MDK / "sun_control.uvguix.1"):
     text = path.read_text(errors="ignore").replace("\\", "/")
     assert not re.search(r"(?:^|/)(?:USER|Core|FreeRTOS-Kernel|FreeRTOS-Helpful)(?:/|$)", text), path
 

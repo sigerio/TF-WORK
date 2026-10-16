@@ -29,9 +29,9 @@ typedef struct
 } rx_channel_t;
 
 static rx_channel_t channels[] = {
-    {.usart_id = BOARD_USART_TC, .data_mark = DATA_FROM_TC},
-    {.usart_id = BOARD_USART_WIND, .data_mark = DATA_FROM_WIND},
-    {.usart_id = BOARD_USART_RAIN, .data_mark = UART3_RX_MARK},
+    {.usart_id = BOARD_USART_SOLAR, .data_mark = DATA_FROM_SOLAR},
+    {.usart_id = BOARD_USART_MACHINE, .data_mark = DATA_FROM_MACHINE},
+    {.usart_id = BOARD_USART_POLE, .data_mark = DATA_FROM_POLE},
 };
 static volatile uint32_t invalid_frames;
 
@@ -155,12 +155,15 @@ static void rx_frame_submit(DATA_MARK_E data_mark, const uint8_t *data, uint16_t
 {
     my_message_node_t node;
     bool submitted = false;
-    comm_log_frame(data_mark, data, length);
     if (length < 4U || length > MY_MESSAGE_DATA_SIZE || modbus_rtu_crc16(data, length) != 0U)
     {
         invalid_frames++;
         return;
     }
+    if (!comm_address_allowed(data_mark, data[0])) {
+        return;
+    }
+    comm_log_frame(data_mark, data, length);
     do
     {
         node.data = pvPortMalloc(length);
@@ -194,9 +197,12 @@ void communication_rx_task(void *pvParameters)
     (void)pvParameters;
     for (;;)
     {
-        if (board_usart_main_dma_rx_fetch(data, &length))
+        if (board_usart_dma_rx_fetch(BOARD_USART_MAIN, data, &length))
         {
             rx_frame_submit(DATA_FROM_MAIN, data, length);
+        }
+        if (board_usart_dma_rx_fetch(BOARD_USART_MT80, data, &length)) {
+            rx_frame_submit(DATA_FROM_MT80, data, length);
         }
         for (uint32_t index = 0; index < sizeof(channels) / sizeof(channels[0]); index++)
         {
