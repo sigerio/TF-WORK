@@ -5,7 +5,7 @@
 #include "gd32f10x_rcu.h"
 #include "gd32f10x_timer.h"
 
-/* 高有效双通道：正向 CH1/CH1/CH3，反向 CH0/CH0/CH2；关闭旧方向后才打开新方向。 */
+/* 高有效双通道：正向 CH0/CH1/CH3，反向 CH1/CH0/CH2；关闭旧方向后才打开新方向。 */
 
 /** 驱动方向的固定高电平占空比。 */
 #ifndef MOTOR_PWM_HIGH_DUTY
@@ -24,7 +24,7 @@ typedef struct {
 } motor_driver_context_t;
 
 static const motor_driver_hw_config_t motor_hw_configs[MOTOR_ID_COUNT] = {
-    [MOTOR_PLATFORM] = { BOARD_PWM_PLATFORM, BOARD_PWM_CH1, BOARD_PWM_CH0 },
+    [MOTOR_PLATFORM] = { BOARD_PWM_PLATFORM, BOARD_PWM_CH0, BOARD_PWM_CH1 },
     [MOTOR_DOOR1] = { BOARD_PWM_DOOR, BOARD_PWM_CH1, BOARD_PWM_CH0 },
     [MOTOR_DOOR2] = { BOARD_PWM_DOOR, BOARD_PWM_CH3, BOARD_PWM_CH2 },
 };

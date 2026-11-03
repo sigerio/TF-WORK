@@ -27,6 +27,14 @@ typedef struct {
 } modbus_master_bus_t;
 
 static modbus_master_bus_t bus_masters[MODBUS_BUS_COUNT];
+static uint8_t wanrong_stop_pending;
+
+void modbus_master_queue_wanrong_stop(modbus_dev_type_t device)
+{
+    if (device < MODBUS_DEV_MACHINE_EXTEND || device > MODBUS_DEV_SOLAR_UNFOLD) return;
+    modbus_txq_drop_wanrong_motion(device);
+    wanrong_stop_pending |= (uint8_t)(1U << (device - MODBUS_DEV_MACHINE_EXTEND));
+}
 
 /* 只合并最新状态，不记录中间变位历史；发送中数据由 com_link 的 TX 缓冲独立持有。 */
 static struct {
@@ -107,6 +115,7 @@ static void modbus_log_frame(const char *direction, modbus_bus_t bus, const uint
 static void modbus_reset_runtime(void)
 {
     modbus_txq_reset();
+    wanrong_stop_pending = 0U;
     weather_fault.fault_value = 0U;
     weather_fault.debug_mask = 0U;
     weather_fault.pending = false;
@@ -383,6 +392,34 @@ static bool modbus_send_next(modbus_bus_t bus)
         return false;
     }
 
+    if (bus == MODBUS_BUS_WEATHER && wanrong_stop_pending != 0U) {
+        const uint8_t addresses[] = {MODULE_MODBUS_MACHINE_EXTEND_ADDR, MODULE_MODBUS_POLE_RAISE_ADDR,
+            MODULE_MODBUS_SOLAR_UNFOLD_ADDR};
+        uint8_t index = 0U;
+        while ((wanrong_stop_pending & (1U << index)) == 0U) index++;
+        modbus_txq_drop_wanrong_motion((modbus_dev_type_t)(MODBUS_DEV_MACHINE_EXTEND + index));
+        frame_len = (uint16_t)modbus_wanrong_build_command(addresses[index], WANRONG_STOP,
+            tx_buf, MODULE_MODBUS_TX_BUF_SIZE);
+        memset(&expect, 0, sizeof(expect));
+        expect.bus = bus;
+        expect.dev_type = (modbus_dev_type_t)(MODBUS_DEV_MACHINE_EXTEND + index);
+        expect.slave_addr = addresses[index];
+        expect.req_type = MODBUS_REQ_WRITE_REG;
+        expect.rsp_func = MODBUS_FC_WRITE_SINGLE_REG;
+        expect.start_addr = expect.echo_addr = WANRONG_REG_COMMAND;
+        expect.quantity = 1U;
+        com_link_rx_clear(link);
+        if (!com_link_tx_start(link, frame_len)) {
+            MODBUS_DIAG_INC(bus, frame_error_count);
+            return false; /* 保留限位停止，发送接口恢复后优先重试。 */
+        }
+        wanrong_stop_pending &= (uint8_t)~(1U << index);
+        master->rsp_expect = expect;
+        modbus_log_frame("TX", bus, tx_buf, frame_len);
+        modbus_wait_start(bus);
+        return true;
+    }
+
     if (bus == MODBUS_BUS_WEATHER && weather_fault.pending) {
         frame_len = (uint16_t)modbus_weather_build_fault_notification(MODULE_MODBUS_WEATHER_ADDR,
             weather_fault.fault_value | weather_fault.debug_mask, tx_buf, MODULE_MODBUS_TX_BUF_SIZE);
@@ -412,6 +449,7 @@ static bool modbus_send_next(modbus_bus_t bus)
         return false;
     }
 
+    modbus_wanrong_command_sent(&expect);
     modbus_wait_start(bus);
     return true;
 }

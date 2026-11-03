@@ -17,6 +17,9 @@ extern "C" {
 
 void iec104_dispatch_init(void);
 
+/* 通信周期续发总召，窗口/队列满时保留进度。 */
+void iec104_dispatch_service(uint32_t now);
+
 /* STOPDT 时清理选择/暂存状态（作为会话回调）。 */
 void iec104_dispatch_reset(void);
 

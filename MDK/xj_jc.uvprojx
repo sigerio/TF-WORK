@@ -815,14 +815,14 @@
               <FilePath>..\USER\COMM\modbus\devices\modbus_wanrong.h</FilePath>
             </File>
             <File>
-              <FileName>modbus_tis.c</FileName>
+              <FileName>modbus_mt80.c</FileName>
               <FileType>1</FileType>
-              <FilePath>..\USER\COMM\modbus\devices\modbus_tis.c</FilePath>
+              <FilePath>..\USER\COMM\modbus\devices\modbus_mt80.c</FilePath>
             </File>
             <File>
-              <FileName>modbus_tis.h</FileName>
+              <FileName>modbus_mt80.h</FileName>
               <FileType>5</FileType>
-              <FilePath>..\USER\COMM\modbus\devices\modbus_tis.h</FilePath>
+              <FilePath>..\USER\COMM\modbus\devices\modbus_mt80.h</FilePath>
             </File>
             <File>
               <FileName>modbus_weather.c</FileName>
@@ -845,26 +845,6 @@
               <FilePath>..\USER\COMM\modbus\devices\modbus_common.h</FilePath>
             </File>
             <File>
-              <FileName>modbus_xm7828.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\USER\COMM\modbus\devices\modbus_xm7828.c</FilePath>
-            </File>
-            <File>
-              <FileName>modbus_xm7828.h</FileName>
-              <FileType>5</FileType>
-              <FilePath>..\USER\COMM\modbus\devices\modbus_xm7828.h</FilePath>
-            </File>
-            <File>
-              <FileName>modbus_xm8189.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\USER\COMM\modbus\devices\modbus_xm8189.c</FilePath>
-            </File>
-            <File>
-              <FileName>modbus_xm8189.h</FileName>
-              <FileType>5</FileType>
-              <FilePath>..\USER\COMM\modbus\devices\modbus_xm8189.h</FilePath>
-            </File>
-            <File>
               <FileName>modbus_xm8537.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\USER\COMM\modbus\devices\modbus_xm8537.c</FilePath>
@@ -873,16 +853,6 @@
               <FileName>modbus_xm8537.h</FileName>
               <FileType>5</FileType>
               <FilePath>..\USER\COMM\modbus\devices\modbus_xm8537.h</FilePath>
-            </File>
-            <File>
-              <FileName>modbus_xm9505.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\USER\COMM\modbus\devices\modbus_xm9505.c</FilePath>
-            </File>
-            <File>
-              <FileName>modbus_xm9505.h</FileName>
-              <FileType>5</FileType>
-              <FilePath>..\USER\COMM\modbus\devices\modbus_xm9505.h</FilePath>
             </File>
             <File>
               <FileName>modbus_ac.c</FileName>

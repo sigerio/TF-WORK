@@ -45,20 +45,21 @@ void iec104_txq_init(void)
     txq_tail = 0U;
 }
 
+uint8_t iec104_txq_can_push(uint16_t apdu_length)
+{
+    return apdu_length > 0U && apdu_length <= IEC104_MAX_FRAME_LENGTH &&
+        apdu_length + IEC104_TXQ_PREFIX_SIZE <= IEC104_TXQ_BUFFER_SIZE - iec104_txq_used();
+}
+
 uint8_t iec104_txq_push(const uint8_t *apdu, uint16_t apdu_length)
 {
     uint16_t needed;
 
-    if ((apdu == NULL) || (apdu_length == 0U) || (apdu_length > IEC104_MAX_FRAME_LENGTH)) {
+    if ((apdu == NULL) || !iec104_txq_can_push(apdu_length)) {
         return 0U;
     }
 
     needed = (uint16_t)(IEC104_TXQ_PREFIX_SIZE + apdu_length);
-    if (needed > (uint16_t)(IEC104_TXQ_BUFFER_SIZE - iec104_txq_used())) {
-        /* 满缓冲：拒绝新帧，交由上层无损重试。 */
-        return 0U;
-    }
-
     if (needed > (uint16_t)(IEC104_TXQ_BUFFER_SIZE - txq_tail)) {
         /* 尾部空间不足，整体前移压缩后再写入。 */
         uint16_t used = iec104_txq_used();

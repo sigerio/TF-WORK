@@ -146,6 +146,14 @@ uint8_t iec104_session_data_transfer_started(void)
     return session.link.data_transfer_started;
 }
 
+uint8_t iec104_session_tuning_allowed(uint8_t response_asdu_length)
+{
+    return session.link.data_transfer_started && session.send_window.unacknowledged_count < 10U &&
+        session.receive_ack.pending_count <= IEC104_W && response_asdu_length > 0U &&
+        response_asdu_length <= IEC104_MAX_ASDU_LENGTH &&
+        iec104_txq_can_push((uint16_t)response_asdu_length + IEC104_CONTROL_LENGTH + 2U);
+}
+
 static void iec104_handle_i_frame(const iec104_frame_t *frame, uint32_t now)
 {
     /* I 帧同时确认本端发送窗口；对端 N(S) 必须与当前期望值严格连续。 */
@@ -154,7 +162,8 @@ static void iec104_handle_i_frame(const iec104_frame_t *frame, uint32_t now)
     }
 
     session.receive_ack.expected_sequence = (uint16_t)((session.receive_ack.expected_sequence + 1U) & IEC104_SEQUENCE_MASK);
-    session.receive_ack.pending_count++;
+    /* 确认持续入队失败时饱和，避免回绕后误放行遥调。 */
+    if (session.receive_ack.pending_count < UINT8_MAX) session.receive_ack.pending_count++;
 
     if ((session.link.data_transfer_started != 0U) && (session.callbacks.on_asdu != NULL)) {
         session.callbacks.on_asdu(frame, now);

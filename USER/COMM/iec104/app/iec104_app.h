@@ -7,9 +7,9 @@
 extern "C" {
 #endif
 
-#define IEC104_APP_STATUS_POINT_COUNT  36U
-#define IEC104_APP_MEASURE_POINT_COUNT 32U
-#define IEC104_APP_TUNING_POINT_COUNT  17U
+#define IEC104_APP_STATUS_POINT_COUNT  75U
+#define IEC104_APP_MEASURE_POINT_COUNT 108U
+#define IEC104_APP_TUNING_POINT_COUNT  60U
 
 #define IEC104_IOA_YX_DOOR_LIMIT_FAULT     0x000017UL /* 门开/关限位冲突。 */
 #define IEC104_IOA_YX_PLATFORM_LIMIT_FAULT 0x000018UL /* 平台伸出/收回限位冲突。 */
@@ -36,11 +36,19 @@ void iec104_app_collect_interrogation(iec104_status_point_t *status_points, iec1
 uint8_t iec104_app_remote_control_is_known(uint32_t ioa);
 void iec104_app_remote_control_execute(uint32_t ioa);
 
+typedef enum {
+    IEC104_TUNING_TARGET_AC = 0U,
+    IEC104_TUNING_TARGET_WEATHER,
+    IEC104_TUNING_TARGET_MT80,
+} iec104_tuning_target_t;
+
 /* 按本地点表查找遥调 IOA、解析对应值并写入空调或传感器参数。 */
 int8_t iec104_app_tuning_index(uint32_t ioa);
 uint8_t iec104_app_tuning_value_length(uint32_t ioa);
-uint8_t iec104_app_tuning_value_parse(uint32_t ioa, const uint8_t *data, uint32_t *value, uint8_t *value_length, uint16_t *register_value);
-uint8_t iec104_app_tuning_write(uint32_t ioa, uint16_t value);
+uint8_t iec104_app_tuning_value_parse(uint32_t ioa, const uint8_t *data, uint32_t *value, uint8_t *value_length, uint32_t *register_value);
+uint8_t iec104_app_tuning_write(uint32_t ioa, uint32_t value);
+uint8_t iec104_app_tuning_target(uint32_t ioa);
+uint8_t iec104_app_tuning_write_group(const uint32_t *ioas, const uint32_t *values, uint8_t count);
 
 #ifdef __cplusplus
 }

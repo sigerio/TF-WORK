@@ -116,7 +116,7 @@ uint8_t iec104_decode(const uint8_t *apdu, uint16_t apdu_length, iec104_frame_t 
         decoded->receive_sequence = iec104_sequence_decode(&control[2]);
         decoded->u_command = IEC104_U_NONE;
     }
-    else if ((control[0] == 0x01U) && (control[1] == 0U) && ((control[2] & 0x01U) == 0U) && (control[3] == 0U) && (asdu_length == 0U))
+    else if ((control[0] == 0x01U) && (control[1] == 0U) && ((control[2] & 0x01U) == 0U) && (asdu_length == 0U))
     {
         decoded->format = IEC104_FRAME_S;
         decoded->send_sequence = 0U;

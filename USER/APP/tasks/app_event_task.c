@@ -15,28 +15,6 @@ typedef struct {
     uint16_t value;
 } usr_485_write_arg_t;
 
-static void usr_485_xm7828_write_cb(void *arg)
-{
-    const usr_485_write_arg_t *write_arg = (const usr_485_write_arg_t *)arg;
-
-    if (write_arg == 0) {
-        return;
-    }
-
-    (void)modbus_xm7828_queue_write(write_arg->slave_addr, write_arg->ref, write_arg->value);
-}
-
-static void usr_485_xm8189_write_cb(void *arg)
-{
-    const usr_485_write_arg_t *write_arg = (const usr_485_write_arg_t *)arg;
-
-    if (write_arg == 0) {
-        return;
-    }
-
-    (void)modbus_xm8189_queue_write(write_arg->slave_addr, write_arg->ref, write_arg->value);
-}
-
 static void usr_485_xm8537_write_cb(void *arg)
 {
     const usr_485_write_arg_t *write_arg = (const usr_485_write_arg_t *)arg;
@@ -46,17 +24,6 @@ static void usr_485_xm8537_write_cb(void *arg)
     }
 
     (void)modbus_xm8537_queue_write(write_arg->slave_addr, write_arg->ref, write_arg->value);
-}
-
-static void usr_485_xm9505_write_cb(void *arg)
-{
-    const usr_485_write_arg_t *write_arg = (const usr_485_write_arg_t *)arg;
-
-    if (write_arg == 0) {
-        return;
-    }
-
-    (void)modbus_xm9505_queue_write(write_arg->slave_addr, write_arg->ref, write_arg->value);
 }
 
 static void usr_485_ac_status_write_cb(void *arg)
@@ -132,10 +99,7 @@ static void usr_platform_state_event_cb(void *arg)
 
 void usr_event_task_init(void)
 {
-    os_soft_event_task(USR_EVENT_485_XM7828_WRITE, usr_485_xm7828_write_cb, 20);
-    os_soft_event_task(USR_EVENT_485_XM8189_WRITE, usr_485_xm8189_write_cb, 20);
     os_soft_event_task(USR_EVENT_485_XM8537_WRITE, usr_485_xm8537_write_cb, 20);
-    os_soft_event_task(USR_EVENT_485_XM9505_WRITE, usr_485_xm9505_write_cb, 20);
     os_soft_event_task(USR_EVENT_485_AC_STATUS_WRITE, usr_485_ac_status_write_cb, 20);
     os_soft_event_task(USR_EVENT_485_AC_PARAM_WRITE, usr_485_ac_param_write_cb, 20);
 

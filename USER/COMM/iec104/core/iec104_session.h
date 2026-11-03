@@ -37,6 +37,10 @@ void iec104_session_service_timers(uint32_t now);
 /* 链路是否处于数据传输态（STARTDT 之后）。 */
 uint8_t iec104_session_data_transfer_started(void);
 
+/* 遥调入口：已启动、发送未确认数 <10、接收待确认数 <=8，且应答可入队。
+ * 只检查不预留；调用方须在同一主循环处理内完成写入提交与等长应答入队。 */
+uint8_t iec104_session_tuning_allowed(uint8_t response_asdu_length);
+
 /*
  * 应用分发层的上行入口：把一段 ASDU 作为 I 帧压入发送队列。
  * 窗口已满或未处于数据传输态时返回 0（上层可无损重试）。

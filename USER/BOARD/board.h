@@ -65,8 +65,8 @@ typedef enum {
     BOARD_PIN_KEY_DOOR,            /* PC2 - 门驱动 */
     BOARD_PIN_KEY_EMERGENCY_STOP,  /* PC0 - 急停 */
     /* ---- 平台推杆电机 PWM ---- */
-    BOARD_PIN_PLATFORM_EXTEND_PWM,  /* PA0 - 电机负 T1_CH0。 */
-    BOARD_PIN_PLATFORM_RETRACT_PWM, /* PA1 - 电机正 T1_CH1。 */
+    BOARD_PIN_PLATFORM_EXTEND_PWM,  /* PA0 - 平台伸出 T1_CH0。 */
+    BOARD_PIN_PLATFORM_RETRACT_PWM, /* PA1 - 平台收回 T1_CH1。 */
     /* ---- 平台到位/限位信号 (读低触发) ---- */
     // BOARD_PIN_PLATFORM_EXTEND_SIGNAL,    /* PA4  - 推出到位信号 */
     // BOARD_PIN_PLATFORM_RETRACT_SIGNAL,   /* PA5  - 收回到位信号 */

@@ -5,6 +5,7 @@
 #include <stdint.h>
 
 #include "COMM/modbus/modbus_config.h"
+#include "COMM/modbus/modbus_txq.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -40,8 +41,10 @@ typedef struct {
 
 /* 初始化两条 RS-485 总线、接收 FIFO 和 Modbus 发送队列。 */
 bool modbus_master_init(void);
-/* 快周期收发任务：气象总线空闲时先发 B4 优先槽，再取普通请求；接收响应并驱动超时处理。 */
+/* 快周期收发任务：气象总线空闲时先发限位停止，再发 B4，最后取普通请求；接收响应并驱动超时处理。 */
 void modbus_master_task(void);
+/* 限位停止使用独立待发位，优先于 B4 和普通队列；不打断正在进行的事务。 */
+void modbus_master_queue_wanrong_stop(modbus_dev_type_t device);
 /* 主循环内调用：覆盖 B4 最新待发状态；不占普通队列、不操作正在发送的 DMA 缓冲。 */
 void modbus_master_queue_weather_fault(uint32_t fault_value);
 /* 轮询补发最新状态，与变位发送共用一个优先槽。 */

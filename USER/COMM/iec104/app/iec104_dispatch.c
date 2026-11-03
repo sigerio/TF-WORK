@@ -18,26 +18,39 @@ typedef struct {
     uint8_t selected;  /* 是否存在待执行的选择。 */
 } iec104_single_command_t;
 
-/* 每个遥调点独立保存选择值，执行报文必须与该值完全一致。 */
-typedef struct {
-    uint32_t ioa;         /* 该遥调点的信息对象地址。 */
-    uint32_t value;       /* 已选择的参数原始值。 */
-    uint8_t value_length; /* 参数值在线序中的字节数。 */
-    uint8_t selected;     /* 是否存在待固化的选择。 */
-} iec104_tuning_point_t;
+#define IEC104_TUNING_OBJECT_MAX 16U
 
 typedef struct {
-    int8_t point_index;
-    uint32_t ioa;         /* 当前解析对象的信息对象地址。 */
+    uint32_t ioa;
     uint32_t value;
-    uint16_t register_value;
     uint8_t pi;
     uint8_t value_length;
 } iec104_tuning_object_t;
 
+typedef struct {
+    iec104_tuning_object_t objects[IEC104_TUNING_OBJECT_MAX];
+    uint8_t count;
+} iec104_tuning_selection_t;
+
 static iec104_single_command_t selected_command;
-static iec104_tuning_point_t tuning_points[IEC104_APP_TUNING_POINT_COUNT];
+static iec104_tuning_selection_t tuning_selections[3];
+/* 遥调逐条请求/应答；暂存尚未进入发送队列的应答，不重做下游写入。 */
+static uint8_t tuning_response[IEC104_MAX_ASDU_LENGTH];
+static uint8_t tuning_response_length;
 static iec104_status_point_t previous_status_points[IEC104_APP_STATUS_POINT_COUNT];
+/* 总召保存同一次采集的快照，窗口满后只重试尚未入队的帧。 */
+static iec104_status_point_t interrogation_status[IEC104_APP_STATUS_POINT_COUNT];
+static iec104_measure_point_t interrogation_measure[IEC104_APP_MEASURE_POINT_COUNT];
+static uint8_t interrogation_phase;
+static uint8_t interrogation_offset;
+
+static uint8_t iec104_flush_tuning_response(uint32_t now)
+{
+    if (tuning_response_length == 0U) return 1U;
+    if (!iec104_session_send_asdu(tuning_response, tuning_response_length, now)) return 0U;
+    tuning_response_length = 0U;
+    return 1U;
+}
 
 static uint8_t iec104_dispatch_send(uint8_t type, uint8_t vsq, uint8_t cot, const uint8_t *objects, uint8_t objects_length, uint32_t now)
 {
@@ -49,11 +62,21 @@ static uint8_t iec104_dispatch_send(uint8_t type, uint8_t vsq, uint8_t cot, cons
         return 0U;
     }
 
+    if (!iec104_flush_tuning_response(now)) return 0U;
     return iec104_session_send_asdu(asdu, asdu_length, now);
 }
 
 static uint8_t iec104_send_command_response(const iec104_frame_t *frame, uint8_t cot, uint32_t now)
 {
+    if (frame->asdu[0] == IEC104_TI_C_WS_NA_1) {
+        if (tuning_response_length != 0U) return 0U;
+        tuning_response_length = iec104_asdu_build(frame->asdu[0], frame->asdu[1], cot, IEC104_COMMON_ADDRESS,
+            &frame->asdu[IEC104_ASDU_HEADER_LENGTH], (uint8_t)(frame->asdu_length - IEC104_ASDU_HEADER_LENGTH),
+            tuning_response, sizeof(tuning_response));
+        if (tuning_response_length == 0U) return 0U;
+        (void)iec104_flush_tuning_response(now);
+        return 1U; /* 应答已入队或已可靠暂存，预置可以生效。 */
+    }
     /* 命令响应原样回送 TI、VSQ 和信息对象，只替换传送原因。 */
     return iec104_dispatch_send(frame->asdu[0], frame->asdu[1], cot, &frame->asdu[IEC104_ASDU_HEADER_LENGTH], (uint8_t)(frame->asdu_length - IEC104_ASDU_HEADER_LENGTH), now);
 }
@@ -85,47 +108,44 @@ static uint8_t iec104_asdu_header_is_valid(const iec104_frame_t *frame, uint8_t 
     return 1U;
 }
 
-static uint8_t iec104_send_status_points(const iec104_status_point_t *points, uint8_t cot, uint32_t now)
-{
-    uint8_t objects[IEC104_APP_STATUS_POINT_COUNT * 4U];
-    uint8_t i;
-
-    /* SQ=0：每个单点信息对象均编码 3 字节 IOA 和 1 字节 SIQ。 */
-    for (i = 0U; i < IEC104_APP_STATUS_POINT_COUNT; i++) {
-        iec104_asdu_ioa_write(&objects[i * 4U], points[i].ioa);
-        objects[i * 4U + 3U] = points[i].value | points[i].quality;
-    }
-
-    return iec104_dispatch_send(IEC104_TI_M_SP_NA_1, IEC104_APP_STATUS_POINT_COUNT, cot, objects, sizeof(objects), now);
-}
-
-static uint8_t iec104_send_measure_points(const iec104_measure_point_t *points, uint8_t cot, uint32_t now)
+void iec104_dispatch_service(uint32_t now)
 {
     uint8_t objects[IEC104_MEASURE_POINTS_PER_ASDU * 8U];
-    uint8_t start = 0U;
-    uint8_t count;
-    uint8_t i;
-
-    /* 固定 16 点一帧；32 个短浮点遥测对象在总召时拆为两帧。 */
-    while (start < IEC104_APP_MEASURE_POINT_COUNT) {
-        count = (uint8_t)(IEC104_APP_MEASURE_POINT_COUNT - start);
-        if (count > IEC104_MEASURE_POINTS_PER_ASDU) {
-            count = IEC104_MEASURE_POINTS_PER_ASDU;
+    if (!iec104_session_data_transfer_started()) return;
+    if (!iec104_flush_tuning_response(now)) return;
+    while (interrogation_phase != 0U) {
+        uint8_t count;
+        uint8_t width;
+        uint8_t type;
+        if (interrogation_phase == 3U) {
+            static const uint8_t end_object[] = { 0U, 0U, 0U, 0x14U };
+            if (!iec104_dispatch_send(IEC104_TI_C_IC_NA_1, 1U, IEC104_COT_ACTTERM, end_object, sizeof(end_object), now)) return;
+            interrogation_phase = 0U;
+            return;
         }
-        for (i = 0U; i < count; i++) {
-            const iec104_measure_point_t *point = &points[start + i];
-
-            iec104_asdu_ioa_write(&objects[i * 8U], point->ioa);
-            memcpy(&objects[i * 8U + 3U], &point->value, sizeof(point->value));
-            objects[i * 8U + 7U] = point->quality;
+        count = (interrogation_phase == 1U ? IEC104_APP_STATUS_POINT_COUNT : IEC104_APP_MEASURE_POINT_COUNT) - interrogation_offset;
+        if (count > IEC104_MEASURE_POINTS_PER_ASDU) count = IEC104_MEASURE_POINTS_PER_ASDU;
+        width = interrogation_phase == 1U ? 4U : 8U;
+        type = interrogation_phase == 1U ? IEC104_TI_M_SP_NA_1 : IEC104_TI_M_ME_NC_1;
+        for (uint8_t i = 0U; i < count; i++) {
+            if (interrogation_phase == 1U) {
+                const iec104_status_point_t *point = &interrogation_status[interrogation_offset + i];
+                iec104_asdu_ioa_write(&objects[i * width], point->ioa);
+                objects[i * width + 3U] = point->value | point->quality;
+            } else {
+                const iec104_measure_point_t *point = &interrogation_measure[interrogation_offset + i];
+                iec104_asdu_ioa_write(&objects[i * width], point->ioa);
+                memcpy(&objects[i * width + 3U], &point->value, sizeof(point->value));
+                objects[i * width + 7U] = point->quality;
+            }
         }
-        if (!iec104_dispatch_send(IEC104_TI_M_ME_NC_1, count, cot, objects, (uint8_t)(count * 8U), now)) {
-            return 0U;
+        if (!iec104_dispatch_send(type, count, IEC104_COT_INTROGEN, objects, count * width, now)) return;
+        interrogation_offset += count;
+        if (interrogation_offset == (interrogation_phase == 1U ? IEC104_APP_STATUS_POINT_COUNT : IEC104_APP_MEASURE_POINT_COUNT)) {
+            interrogation_offset = 0U;
+            interrogation_phase++;
         }
-        start = (uint8_t)(start + count);
     }
-
-    return 1U;
 }
 
 static void iec104_handle_single_command(const iec104_frame_t *frame, uint32_t now)
@@ -192,8 +212,6 @@ static void iec104_handle_single_command(const iec104_frame_t *frame, uint32_t n
 
 static void iec104_handle_interrogation(const iec104_frame_t *frame, uint32_t now)
 {
-    iec104_status_point_t status_points[IEC104_APP_STATUS_POINT_COUNT];
-    iec104_measure_point_t measure_points[IEC104_APP_MEASURE_POINT_COUNT];
 
     if (!iec104_asdu_header_is_valid(frame, IEC104_TI_C_IC_NA_1, IEC104_COT_ACT, now)) {
         return;
@@ -205,115 +223,86 @@ static void iec104_handle_interrogation(const iec104_frame_t *frame, uint32_t no
         return;
     }
 
-    /* 总召唤顺序固定为激活确认、遥信、遥测、激活终止。 */
-    if (!iec104_send_command_response(frame, IEC104_COT_ACTCON, now)) {
+    if (interrogation_phase != 0U) {
+        (void)iec104_send_command_response(frame, IEC104_COT_ACTCON | IEC104_COT_NEGATIVE, now);
         return;
     }
-
-    iec104_app_collect_interrogation(status_points, measure_points);
-    if (!iec104_send_status_points(status_points, IEC104_COT_INTROGEN, now)) {
-        return;
-    }
-    if (!iec104_send_measure_points(measure_points, IEC104_COT_INTROGEN, now)) {
-        return;
-    }
-    (void)iec104_send_command_response(frame, IEC104_COT_ACTTERM, now);
+    if (!iec104_send_command_response(frame, IEC104_COT_ACTCON, now)) return;
+    iec104_app_collect_interrogation(interrogation_status, interrogation_measure);
+    interrogation_offset = 0U;
+    interrogation_phase = 1U;
+    iec104_dispatch_service(now);
 }
 
 static void iec104_handle_tuning(const iec104_frame_t *frame, uint32_t now)
 {
-    iec104_tuning_object_t objects[IEC104_APP_TUNING_POINT_COUNT];
+    iec104_tuning_object_t objects[IEC104_TUNING_OBJECT_MAX];
+    uint32_t ioas[IEC104_TUNING_OBJECT_MAX];
+    uint32_t values[IEC104_TUNING_OBJECT_MAX];
+    uint16_t offset = IEC104_ASDU_HEADER_LENGTH;
     uint8_t count;
-    uint8_t offset;
-    uint8_t object_index;
-    uint8_t execute;
+    uint8_t target = 0xFFU;
+    iec104_tuning_selection_t *selection;
 
-    if (!iec104_asdu_header_is_valid(frame, IEC104_TI_C_WS_NA_1, IEC104_COT_ACT, now)) {
-        return;
-    }
-
+    if (!iec104_asdu_header_is_valid(frame, IEC104_TI_C_WS_NA_1, IEC104_COT_ACT, now)) return;
     count = frame->asdu[1] & 0x7FU;
-    if (((frame->asdu[1] & 0x80U) != 0U) || (count == 0U) || (count > IEC104_APP_TUNING_POINT_COUNT)) {
-        (void)iec104_send_command_response(frame, IEC104_COT_ACTCON | IEC104_COT_NEGATIVE, now);
-        return;
-    }
-
-    /*
-     * 第一阶段只解析并校验全部对象，不修改选择状态或设备参数；
-     * 任一对象非法时整帧拒绝，避免半帧已经产生业务副作用。
-     */
-    offset = IEC104_ASDU_HEADER_LENGTH;
-    for (object_index = 0U; object_index < count; object_index++) {
-        iec104_tuning_object_t *object = &objects[object_index];
-        uint8_t expected_value_length;
-
-        if ((uint16_t)offset + 4U > frame->asdu_length) {
-            (void)iec104_send_command_response(frame, IEC104_COT_ACTCON | IEC104_COT_NEGATIVE, now);
-            return;
-        }
-
+    if ((frame->asdu[1] & 0x80U) || count == 0U || count > IEC104_TUNING_OBJECT_MAX) goto invalid;
+    /* 全帧先校验；排序、同设备、同 PI 和完整预置匹配均通过后才允许写入。 */
+    for (uint8_t i = 0U; i < count; i++) {
+        iec104_tuning_object_t *object = &objects[i];
+        uint32_t register_value;
+        uint8_t length;
+        if (offset + 4U > frame->asdu_length) goto invalid;
         object->ioa = iec104_asdu_ioa_read(&frame->asdu[offset]);
-        object->point_index = iec104_app_tuning_index(object->ioa);
-        if (object->point_index < 0) {
+        if (iec104_app_tuning_index(object->ioa) < 0) {
             (void)iec104_send_command_response(frame, IEC104_COT_UNKNOWN_IOA, now);
             return;
         }
-
         object->pi = frame->asdu[offset + 3U];
-        if ((object->pi & 0x7CU) != 0U) {
-            (void)iec104_send_command_response(frame, IEC104_COT_ACTCON | IEC104_COT_NEGATIVE, now);
-            return;
-        }
-
-        expected_value_length = iec104_app_tuning_value_length(object->ioa);
-        if ((uint16_t)offset + 4U + expected_value_length > frame->asdu_length) {
-            (void)iec104_send_command_response(frame, IEC104_COT_ACTCON | IEC104_COT_NEGATIVE, now);
-            return;
-        }
-
-        if (!iec104_app_tuning_value_parse(object->ioa, &frame->asdu[offset + 4U], &object->value, &object->value_length, &object->register_value)) {
-            (void)iec104_send_command_response(frame, IEC104_COT_ACTCON | IEC104_COT_NEGATIVE, now);
-            return;
-        }
-
-        offset = (uint8_t)(offset + 4U + object->value_length);
+        if (object->pi > 2U) goto invalid;
+        if (i == 0U) target = iec104_app_tuning_target(object->ioa);
+        if (target != iec104_app_tuning_target(object->ioa) ||
+            (target == IEC104_TUNING_TARGET_AC && count > 13U) ||
+            (target == IEC104_TUNING_TARGET_WEATHER && count > 2U)) goto invalid;
+        if (i != 0U && (object->ioa <= objects[i - 1U].ioa || object->pi != objects[0].pi)) goto invalid;
+        length = iec104_app_tuning_value_length(object->ioa);
+        if (offset + 4U + length > frame->asdu_length) goto invalid;
+        if (!iec104_app_tuning_value_parse(object->ioa, &frame->asdu[offset + 4U],
+            &object->value, &object->value_length, &register_value)) goto invalid;
+        ioas[i] = object->ioa;
+        values[i] = register_value;
+        offset += 4U + length;
     }
-
-    if (offset != frame->asdu_length) {
-        (void)iec104_send_command_response(frame, IEC104_COT_ACTCON | IEC104_COT_NEGATIVE, now);
+    if (offset != frame->asdu_length) goto invalid;
+    selection = &tuning_selections[target];
+    if (objects[0].pi == 1U) {
+        if (iec104_send_command_response(frame, IEC104_COT_ACTCON, now)) {
+            memcpy(selection->objects, objects, count * sizeof(objects[0]));
+            selection->count = count;
+        }
         return;
     }
-
-    /* PI bit1 取消选择，bit0 建立选择，两位均为 0 时执行已选择值。 */
-    execute = 0U;
-    for (object_index = 0U; object_index < count; object_index++) {
-        const iec104_tuning_object_t *object = &objects[object_index];
-        iec104_tuning_point_t *point = &tuning_points[object->point_index];
-
-        if ((object->pi & 0x02U) != 0U) {
-            point->selected = 0U;
-            continue;
-        }
-
-        if ((object->pi & 0x01U) != 0U) {
-            point->ioa = object->ioa;
-            point->value = object->value;
-            point->value_length = object->value_length;
-            point->selected = 1U;
-            continue;
-        }
-
-        if ((point->selected == 0U) || (point->ioa != object->ioa) || (point->value != object->value) || (point->value_length != object->value_length) || !iec104_app_tuning_write(object->ioa,
-            object->register_value)) {
-            (void)iec104_send_command_response(frame, IEC104_COT_ACTTERM | IEC104_COT_NEGATIVE, now);
-            return;
-        }
-
-        point->selected = 0U;
-        execute = 1U;
+    if (objects[0].pi == 2U) {
+        selection->count = 0U;
+        (void)iec104_send_command_response(frame, IEC104_COT_ACTCON, now);
+        return;
     }
+    if (selection->count != count) goto mismatch;
+    for (uint8_t i = 0U; i < count; i++) {
+        if (selection->objects[i].ioa != objects[i].ioa || selection->objects[i].value != objects[i].value ||
+            selection->objects[i].value_length != objects[i].value_length) goto mismatch;
+    }
+    selection->count = 0U;
+    if (!iec104_app_tuning_write_group(ioas, values, count)) goto mismatch;
+    (void)iec104_send_command_response(frame, IEC104_COT_ACTTERM, now);
+    return;
 
-    (void)iec104_send_command_response(frame, execute ? IEC104_COT_ACTTERM : IEC104_COT_ACTCON, now);
+mismatch:
+    selection->count = 0U;
+    (void)iec104_send_command_response(frame, IEC104_COT_ACTTERM | IEC104_COT_NEGATIVE, now);
+    return;
+invalid:
+    (void)iec104_send_command_response(frame, IEC104_COT_ACTCON | IEC104_COT_NEGATIVE, now);
 }
 
 void iec104_dispatch_init(void)
@@ -322,7 +311,10 @@ void iec104_dispatch_init(void)
     uint8_t i;
 
     memset(&selected_command, 0, sizeof(selected_command));
-    memset(tuning_points, 0, sizeof(tuning_points));
+    memset(tuning_selections, 0, sizeof(tuning_selections));
+    tuning_response_length = 0U;
+    interrogation_phase = 0U;
+    interrogation_offset = 0U;
     /* 以初始化时的实际状态作为基线，避免启动后把全部遥信误判为变位。 */
     iec104_app_collect_status_points(status_points);
     memcpy(previous_status_points, status_points, sizeof(previous_status_points));
@@ -338,7 +330,10 @@ void iec104_dispatch_init(void)
 void iec104_dispatch_reset(void)
 {
     selected_command.selected = 0U;
-    memset(tuning_points, 0, sizeof(tuning_points));
+    memset(tuning_selections, 0, sizeof(tuning_selections));
+    tuning_response_length = 0U;
+    interrogation_phase = 0U;
+    interrogation_offset = 0U;
 }
 
 void iec104_dispatch_handle(const iec104_frame_t *frame, uint32_t now)
@@ -357,6 +352,11 @@ void iec104_dispatch_handle(const iec104_frame_t *frame, uint32_t now)
         break;
 
     case IEC104_TI_C_WS_NA_1:
+        /* 前一应答待发时不接受下一请求，也不覆盖或重复执行前一事务。 */
+        if (tuning_response_length != 0U) {
+            (void)iec104_flush_tuning_response(now);
+            return;
+        }
         iec104_handle_tuning(frame, now);
         break;
 
@@ -372,6 +372,7 @@ void iec104_dispatch_send_spontaneous(uint32_t now)
     uint8_t object[4];
     uint8_t i;
 
+    if (interrogation_phase != 0U) return;
     iec104_app_collect_status_points(points);
     for (i = 0U; i < IEC104_APP_STATUS_POINT_COUNT; i++) {
         if ((points[i].value == previous_status_points[i].value) && (points[i].quality == previous_status_points[i].quality)) {

@@ -3,6 +3,7 @@
 #include <string.h>
 
 #include "COMMON/circular_index.h"
+#include "COMM/modbus/devices/modbus_wanrong.h"
 
 typedef struct {
     uint8_t frame_buf[MODULE_MODBUS_SEND_BUF_SIZE];
@@ -99,6 +100,24 @@ static void modbus_txq_remove_slot(modbus_txq_t *txq, uint8_t slot)
 
     txq->tail_slot = modbus_txq_prev_slot(txq->tail_slot);
     txq->item_count--;
+}
+
+void modbus_txq_drop_wanrong_motion(modbus_dev_type_t device)
+{
+    modbus_txq_t *txq = &transmit_queue;
+    uint8_t slot = txq->head_slot;
+    uint8_t offset = 0U;
+
+    while (offset < txq->item_count) {
+        const modbus_rsp_expect_t *expect = &txq->items[slot].expect;
+        if (expect->dev_type == device && expect->req_type == MODBUS_REQ_WRITE_REG &&
+            expect->echo_addr == WANRONG_REG_COMMAND && expect->echo_value != WANRONG_STOP) {
+            modbus_txq_remove_slot(txq, slot);
+        } else {
+            slot = modbus_txq_next_slot(slot);
+            offset++;
+        }
+    }
 }
 
 static void modbus_txq_drop_head(void)

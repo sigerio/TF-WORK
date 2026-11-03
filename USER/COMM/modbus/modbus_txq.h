@@ -12,7 +12,7 @@ extern "C" {
 
 /** @brief Modbus 485 总线标识（每条总线对应一个 com_link 实例） */
 typedef enum {
-    MODBUS_BUS_WEATHER = 0,  /**< 气象板总线：xm7828/xm8189/xm8537/xm9505 */
+    MODBUS_BUS_WEATHER = 0,  /**< 气象板总线：三合一气象/水浸/分发板 */
     MODBUS_BUS_AC,           /**< 空调总线                                */
     MODBUS_BUS_COUNT,        /**< 总线数量                                */
 } modbus_bus_t;
@@ -20,14 +20,12 @@ typedef enum {
 /** @brief 支持的 Modbus 从机设备类型 */
 typedef enum {
     MODBUS_DEV_AC = 0,               /**< 空调设备                           */
-    MODBUS_DEV_XM7828_TH,    /**< XM7828 温湿度传感器                */
-    MODBUS_DEV_XM8189_WIND,      /**< XM8189 风速风向传感器              */
     MODBUS_DEV_XM8537_WATER,     /**< XM8537 水浸传感器                  */
-    MODBUS_DEV_XM9505_RAIN,      /**< XM9505 雨量传感器                  */
-    MODBUS_DEV_MACHINE_EXTEND,   /**< 整机推出：仅万融 4X-2000 命令 */
-    MODBUS_DEV_POLE_RAISE,       /**< 立杆升起：仅万融 4X-2000 命令 */
-    MODBUS_DEV_SOLAR_UNFOLD,     /**< 太阳板展开：仅万融 4X-2000 命令 */
-    MODBUS_DEV_TIS,
+    MODBUS_DEV_MACHINE_EXTEND,   /**< 整机推出：万融命令与输入状态 */
+    MODBUS_DEV_POLE_RAISE,       /**< 立杆升起：万融命令与输入状态 */
+    MODBUS_DEV_SOLAR_UNFOLD,     /**< 太阳板展开：万融命令与输入状态 */
+    MODBUS_DEV_MT80,
+    MODBUS_DEV_WEATHER_SENSOR,   /**< 三合一气象传感器 */
     MODBUS_DEV_COUNT,            /**< 设备实例数量 */
 } modbus_dev_type_t;
 
@@ -86,6 +84,8 @@ typedef struct {
 void modbus_txq_reset(void);
 /* 复制一帧请求及其期望响应到共享发送队列。 */
 bool modbus_txq_push(const uint8_t *frame, uint16_t frame_len, const modbus_rsp_expect_t *expect);
+/* 限位停止/物理按键接管时清除该电机待发运动命令，保留停止和读取。 */
+void modbus_txq_drop_wanrong_motion(modbus_dev_type_t device);
 /* 仅取出指定总线的最早请求，避免不同总线互相占用发送机会。 */
 bool modbus_txq_pop(modbus_bus_t bus, uint8_t *frame, uint16_t frame_capacity, uint16_t *frame_len, modbus_rsp_expect_t *expect);
 /* 返回全部总线尚未发送的请求条目数。 */

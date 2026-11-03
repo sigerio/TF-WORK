@@ -38,20 +38,13 @@
 #define MODULE_MODBUS_RESPONSE_TIMEOUT_MS      200U
 #endif
 
-#ifndef MODULE_MODBUS_XM7828_ADDR
-#define MODULE_MODBUS_XM7828_ADDR              5U  /**< 气象总线：温湿度传感器 */
-#endif
-
-#ifndef MODULE_MODBUS_XM8189_ADDR
-#define MODULE_MODBUS_XM8189_ADDR              2U  /**< 气象总线：风速风向传感器 */
+/* 主控上行逻辑地址；设备默认 0x01/4800 由 wether 下行口处理。 */
+#ifndef MODULE_MODBUS_WEATHER_SENSOR_ADDR
+#define MODULE_MODBUS_WEATHER_SENSOR_ADDR      2U
 #endif
 
 #ifndef MODULE_MODBUS_XM8537_ADDR
 #define MODULE_MODBUS_XM8537_ADDR              4U  /**< 气象总线：水浸传感器 */
-#endif
-
-#ifndef MODULE_MODBUS_XM9505_ADDR
-#define MODULE_MODBUS_XM9505_ADDR              3U  /**< 气象总线：雨量传感器 */
 #endif
 
 #ifndef MODULE_MODBUS_AC_ADDR
@@ -72,12 +65,12 @@
 #ifndef MODULE_MODBUS_SOLAR_UNFOLD_ADDR
 #define MODULE_MODBUS_SOLAR_UNFOLD_ADDR 0x13U
 #endif
-#ifndef MODULE_MODBUS_TIS_ADDR
-#define MODULE_MODBUS_TIS_ADDR 0x14U
+#ifndef MODULE_MODBUS_MT80_ADDR
+#define MODULE_MODBUS_MT80_ADDR 0x14U
 #endif
 
-/* 新设备短帧上限，不修改原气象/空调及公共 RTU 标准上限。 */
-#define MODULE_MODBUS_TIS_MAX_REGS 16U
-#define MODULE_MODBUS_TIS_MAX_BITS 16U
+/* MT80 下游默认 0x0A/115200，sun_control 需将逻辑 0x14 映射为 0x0A。 */
+/* 短帧上限，不修改公共 RTU 标准上限。 */
+#define MODULE_MODBUS_MT80_MAX_REGS 16U
 
 #endif /* MODBUS_CONFIG_H */

@@ -16,3 +16,6 @@ MDK/EventRecorderStub.scvd
 MDK/Listing/
 MDK/Objects/
 MDK/RTE/
+
+# Keep local tests outside version control.
+/tests/

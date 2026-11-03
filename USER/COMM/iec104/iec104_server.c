@@ -150,6 +150,7 @@ void iec104_server_comm_task(void)
         iec104_receive_available_frames(now);
     }
     iec104_session_service_timers(now);
+    iec104_dispatch_service(now);
     iec104_send_queued_apdu();
     if (iec104_session_data_transfer_started() != 0U) {
         set_signal(OS_IEC104_ONLINE);
