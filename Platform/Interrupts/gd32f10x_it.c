@@ -130,12 +130,12 @@ void USART0_IRQHandler(void)
 
 void UART3_IRQHandler(void)
 {
-    board_usart_rx_irq_handler(BOARD_USART_RAIN);
+    board_usart_rx_irq_handler(BOARD_USART_WATER);
 }
 
 void UART4_IRQHandler(void)
 {
-    board_usart_rx_irq_handler(BOARD_USART_WATER);
+    board_usart_rx_irq_handler(BOARD_USART_RAIN);
 }
 
 void USART1_IRQHandler(void)

@@ -35,7 +35,7 @@ void run_led_task(void *pvParameters)
     (void)pvParameters;
     for (;;)
     {
-        if(run_cnt == 50)
+        if(run_cnt == 100)
         {
             led_on = !led_on;
             gpio_bit_write(BOARD_PIN_PORT(BOARD_PIN_LED), BOARD_PIN_PIN(BOARD_PIN_LED),

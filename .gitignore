@@ -4,3 +4,6 @@
 /MDK/JLinkLog.txt
 /MDK/JLinkSettings.ini
 /MDK/EventRecorderStub.scvd
+
+# Keep local tests outside version control.
+/tests/

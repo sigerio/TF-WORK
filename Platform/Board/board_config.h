@@ -9,8 +9,9 @@
 #include "gd32f10x_timer.h"
 
 /* 气象板串口拓扑：USART1 由主控通信与 4G 复用，当前仅启用主控。
- * USART0=温湿度，USART2=风速风向，UART3=雨量，UART4=水浸。
- * PA15 用作雨量 485 方向控制，关闭 JTAG、保留 SWD 后可用。
+ * USART2=三合一气象(4800/8N1)，UART3=独立水浸(9600/8N1)。
+ * USART0/ UART4 原温湿度/雨量逻辑路由闲置；WIND 标识沿用原风口命名。
+ * PA15 用作水浸 485 方向控制，关闭 JTAG、保留 SWD 后可用。
  */
 
 typedef enum {
@@ -21,17 +22,17 @@ typedef enum {
     BOARD_PIN_USART1_RX,       /* PA3  - 主控/4G复用，当前主控*/
     BOARD_PIN_USART2_TX,       /* PB10 - 风速风向485 */
     BOARD_PIN_USART2_RX,       /* PB11 - 风速风向485 */
-    BOARD_PIN_USART3_TX,       /* PC10 - 雨量485*/
-    BOARD_PIN_USART3_RX,       /* PC11 - 雨量485*/
-    BOARD_PIN_UART4_TX,        /* PC12 - 水浸485 */
-    BOARD_PIN_UART4_RX,        /* PD2  - 水浸485 */
+    BOARD_PIN_USART3_TX,       /* PC10 - 水浸485*/
+    BOARD_PIN_USART3_RX,       /* PC11 - 水浸485*/
+    BOARD_PIN_UART4_TX,        /* PC12 - 闲置485 */
+    BOARD_PIN_UART4_RX,        /* PD2  - 闲置485 */
     
     /* ---- 485 方向控制 (拉高发送/拉低接收, 默认拉低) ---- */
     BOARD_PIN_RS485_MAIN_DIR,      /* PA1  - 主板 */
     BOARD_PIN_RS485_WIND_DIR,   /* PB2  - 风速 */
-    BOARD_PIN_RS485_RAIN_DIR,        /* PA15 - 雨量 */
+    BOARD_PIN_RS485_RAIN_DIR,        /* PB13 - 原雨量逻辑路由，闲置 */
     BOARD_PIN_RS485_TC_DIR, /* PA8  - 温湿度 */
-    BOARD_PIN_RS485_WATER_DIR, /* PB13 -  水浸 */
+    BOARD_PIN_RS485_WATER_DIR, /* PA15 - 水浸 */
 
     
     /* ---- 其它输出 (拉低触发, 默认拉高) ---- */
@@ -46,9 +47,9 @@ typedef enum {
 typedef enum {
     BOARD_USART_TC = 0, /* USART0 - 温湿度485 */
     BOARD_USART_MAIN,   /* USART1 - 主控/4G复用，当前主控 */
-    BOARD_USART_WIND,     /* USART2 - 风速风向通信 */
-    BOARD_USART_RAIN,          /* UART3  - 雨量485 */
-    BOARD_USART_WATER,   /* UART4  - 水浸485 */
+    BOARD_USART_WIND,     /* USART2 - 三合一风速风向/雨量/温湿度 */
+    BOARD_USART_RAIN,          /* UART4  - 原雨量逻辑路由，闲置 */
+    BOARD_USART_WATER,   /* UART3  - 水浸485 */
     BOARD_USART_COUNT,
 } board_usart_id_e;
 

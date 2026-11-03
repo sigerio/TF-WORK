@@ -68,13 +68,13 @@ void comm_log_frame(DATA_MARK_E data_mark, const uint8_t *data, uint16_t data_le
     switch (data_mark) {
     case DATA_FROM_MAIN: label = "UART1 RX"; break;
     case DATA_FROM_WIND: label = "UART2 RX"; break;
-    case DATA_FROM_RAIN: label = "UART3 RX"; break;
-    case DATA_FROM_WATER: label = "UART4 RX"; break;
+    case DATA_FROM_RAIN: label = "UART4 RX"; break;
+    case DATA_FROM_WATER: label = "UART3 RX"; break;
     case DATA_FROM_TC: label = "UART0 RX"; break;
     case DATA_TO_MAIN: label = "UART1 TX"; break;
     case DATA_TO_WIND: label = "UART2 TX"; break;
-    case DATA_TO_RAIN: label = "UART3 TX"; break;
-    case DATA_TO_WATER: label = "UART4 TX"; break;
+    case DATA_TO_RAIN: label = "UART4 TX"; break;
+    case DATA_TO_WATER: label = "UART3 TX"; break;
     case DATA_TO_TC: label = "UART0 TX"; break;
     default: return;
     }

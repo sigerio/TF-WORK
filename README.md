@@ -44,7 +44,7 @@ MDK 使用的 FreeRTOS 内核文件位于 `ThirdParty/FreeRTOS/Kernel/`，许可
 
 RTT Terminal 0 使用 `SEGGER_RTT_printf` 按完整帧输出 `[12345 ms] [UARTn RX/TX len=N] XX XX ...`。
 所有串口 RX/TX 仅打印长度为 4～256 字节且 Modbus CRC 校验通过的帧；短帧及 CRC 错误帧不打印。RX 在修改地址前打印，TX 在发送接口接受报文后打印，USART1 TX 表示 DMA 已启动。时间戳来自 FreeRTOS 系统 tick，换算为调度器启动后的毫秒数，表示日志生成时间；当前 1 kHz、32 位 tick 配置下约 49.7 天回绕。主控侧非白名单地址帧即使 CRC 正确也不打印；通过接收校验的 Modbus 异常响应仍可打印，不额外判断传感器数据语义。
-覆盖全部五路串口：USART0 温湿度、USART1 主控、USART2 风速风向、UART3 雨量、UART4 水浸。USART1 为主控/4G 复用端口，当前仅启用主控通信，4G 暂不开发。
+日志覆盖五路串口：USART1 主控、USART2 三合一气象、UART3 独立水浸；USART0 原温湿度口与 UART4 原雨量逻辑路由闲置。USART1 为主控/4G 复用端口，当前仅启用主控通信，4G 暂不开发。
 日志在任务上下文输出，发送忙或失败的重试不打印；坏帧不打印，也不会入队转发。RTT 空间不足时整条日志跳过，避免打印半条或阻塞通信；持续观察需要保持 RTT Viewer 读取。打印范围为接收缓存实际交给任务的数据，DMA 溢出或待取缓存占用造成的丢帧无法还原。
 
 打开 `MDK/wether.uvprojx`，使用 ARM Compiler 5.06u7 编译。工程与调试选项均使用相对路径。
@@ -58,4 +58,4 @@ python3 tests/test_led_buzzer.py
 python3 tests/test_project_layout.py
 ```
 
-雨量固定使用 UART3，水浸固定使用 UART4，两路独立收发，无需切换配置。接线、收帧限制及队列行为见 `docs/hardware_and_communication.md`。
+风速风向、雨量、温湿度统一通过 USART2 的三合一设备获取（4800/8N1，设备站号 0x01）；水浸改用 UART3（GD32 库命名，对应 USART3；9600/8N1，设备站号 0x01）。USART0 与 UART4 闲置，主控不再请求地址 5、3。接线、收帧限制及队列行为见 `docs/hardware_and_communication.md`。
