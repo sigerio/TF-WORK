@@ -34,6 +34,8 @@ void iec104_app_collect_interrogation(iec104_status_point_t *status_points, iec1
 
 /* 按本地点表查找/执行遥控 IOA；未知地址由上层返回 unknown IOA。 */
 uint8_t iec104_app_remote_control_is_known(uint32_t ioa);
+/* 按键流程运行/等待/暂停时拒绝门与平台遥控；其他点不受影响。 */
+uint8_t iec104_app_remote_control_allowed(uint32_t ioa);
 void iec104_app_remote_control_execute(uint32_t ioa);
 
 typedef enum {

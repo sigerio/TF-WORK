@@ -38,6 +38,14 @@ static platform_phase_e platform_phase;
 static uint16_t platform_reverse_ms;
 static uint8_t platform_start_failures;
 
+typedef enum {
+    KEY_OWNER_NONE = 0,
+    KEY_OWNER_DOOR,
+    KEY_OWNER_PLATFORM
+} key_owner_e;
+
+static key_owner_e key_owner;
+static bool motion_paused;
 static bool estop_active;
 /* 保留具名符号供调试器 Watch 查看；外部通过只读快照接口访问。 */
 static motor_control_status_t motor_status;
@@ -65,33 +73,51 @@ static void stop_door_motors(void)
     (void)motor_driver_stop(MOTOR_DOOR2);
 }
 
-static void stop_door_motion(void)
+static void halt_door_motion(void)
 {
     door_running_in_e running = E_DOOR_RUN_IDLE;
 
     stop_door_motors();
     if (is_signal_set(OS_DOOR_S)) (void)os_event_trigger(USR_EVENT_DOOR_STATE, &running, sizeof(running), 1U);
     cancel_signal(OS_DOOR_S);
-    door_phase = DOOR_IDLE;
-    door_reverse_ms = 0U;
-    door_start_failures = 0U;
     motor_status.door_action = MOTOR_DOOR_STOPPED;
-    motor_status.door_fault &= ~MOTOR_FAULT_START_FAILED;
     if (motor_status.door_position == MOTOR_DOOR_CLOSED) board_door_lock_write(true);
 }
 
-static void stop_platform_motion(void)
+static void stop_door_motion(void)
+{
+    halt_door_motion();
+    door_phase = DOOR_IDLE;
+    door_reverse_ms = 0U;
+    door_start_failures = 0U;
+    motor_status.door_fault &= ~MOTOR_FAULT_START_FAILED;
+}
+
+static void halt_platform_motion(void)
 {
     platform_running_in_e running = E_PLATFORM_RUN_IDLE;
 
     (void)motor_driver_stop(MOTOR_PLATFORM);
     if (is_signal_set(OS_HELIPAD_S)) (void)os_event_trigger(USR_EVENT_PLATFORM_STATE, &running, sizeof(running), 1U);
     cancel_signal(OS_HELIPAD_S);
+    motor_status.platform_action = MOTOR_PLATFORM_STOPPED;
+}
+
+static void stop_platform_motion(void)
+{
+    halt_platform_motion();
     platform_phase = PLATFORM_IDLE;
     platform_reverse_ms = 0U;
     platform_start_failures = 0U;
-    motor_status.platform_action = MOTOR_PLATFORM_STOPPED;
     motor_status.platform_fault &= ~MOTOR_FAULT_START_FAILED;
+}
+
+static void cancel_all_motion(void)
+{
+    stop_door_motion();
+    stop_platform_motion();
+    key_owner = KEY_OWNER_NONE;
+    motion_paused = false;
 }
 
 /* 命令与周期共用保护入口：故障出现/恢复都取消旧请求，查询接口不做这些操作。 */
@@ -103,8 +129,12 @@ static bool enforce_limit_stop(void)
     read_positions_and_faults();
     fault = ((motor_status.door_fault | motor_status.platform_fault) & MOTOR_FAULT_LIMIT_CONFLICT) != 0;
     if (was_fault || fault) {
-        stop_door_motion();
-        stop_platform_motion();
+        cancel_all_motion();
+    }
+    if ((motor_status.door_action == MOTOR_DOOR_CLOSING && motor_status.platform_position != MOTOR_PLATFORM_RETRACTED) ||
+        (motor_status.platform_action == MOTOR_PLATFORM_EXTENDING && motor_status.door_position != MOTOR_DOOR_OPENED)) {
+        cancel_all_motion();
+        return true;
     }
     return fault;
 }
@@ -115,8 +145,7 @@ void motor_control_set_estop(bool active)
     estop_active = active;
     if (active) {
         read_positions_and_faults();
-        stop_door_motion();
-        stop_platform_motion();
+        cancel_all_motion();
     }
 }
 
@@ -133,7 +162,11 @@ void motor_control_init(void)
 
 void motor_control_get_status(motor_control_status_t *status)
 {
-    if (status != 0) *status = motor_status;
+    if (status != 0) {
+        *status = motor_status;
+        status->key_control_active = key_owner != KEY_OWNER_NONE;
+        status->paused = motion_paused;
+    }
 }
 
 static void queue_door_motion(door_phase_e phase)
@@ -192,28 +225,6 @@ void motor_control_request_door_close(void)
     }
 }
 
-void motor_control_toggle_door(void)
-{
-    if (enforce_limit_stop() || estop_active) return;
-    switch (door_phase) {
-    case DOOR_START_OPEN:
-    case DOOR_OPEN_RUNNING:
-    case DOOR_REVERSE_TO_OPEN:
-        motor_control_request_door_close();
-        break;
-    case DOOR_WAIT_PLATFORM:
-    case DOOR_START_CLOSE:
-    case DOOR_CLOSE_RUNNING:
-    case DOOR_REVERSE_TO_CLOSE:
-        motor_control_request_door_open();
-        break;
-    default:
-        if (motor_status.door_position == MOTOR_DOOR_OPENED) motor_control_request_door_close();
-        else motor_control_request_door_open();
-        break;
-    }
-}
-
 static bool door_close_allowed(void)
 {
     return motor_status.platform_fault == MOTOR_FAULT_NONE && motor_status.platform_position == MOTOR_PLATFORM_RETRACTED &&
@@ -247,6 +258,12 @@ static void update_door(void)
             stop_door_motion();
             break;
         }
+        if (!open && !door_close_allowed()) {
+            halt_door_motion();
+            door_phase = DOOR_WAIT_PLATFORM;
+            motor_control_request_platform_retract();
+            break;
+        }
         if (door_phase == DOOR_OPEN_RUNNING || door_phase == DOOR_CLOSE_RUNNING) break;
         /* 两台电机共用门组限位；任何一台启动失败都停止整个门组。 */
         started = motor_driver_start(MOTOR_DOOR1, open ? MOTOR_DIR_BACKWARD : MOTOR_DIR_FORWARD);
@@ -258,7 +275,7 @@ static void update_door(void)
         } else {
             stop_door_motors();
             if (++door_start_failures >= 3U) {
-                stop_door_motion();
+                cancel_all_motion();
                 motor_status.door_fault |= MOTOR_FAULT_START_FAILED;
             }
         }
@@ -325,26 +342,109 @@ void motor_control_request_platform_extend(void)
     }
 }
 
+/* 暂停只关闭输出，保留两个状态机及换向计时；恢复时重新申请启动并校验互锁。 */
+static void toggle_motion_pause(void)
+{
+    if (!motion_paused) {
+        halt_door_motion();
+        halt_platform_motion();
+        motion_paused = true;
+        return;
+    }
+
+    motion_paused = false;
+    switch (door_phase) {
+    case DOOR_START_OPEN:
+    case DOOR_OPEN_RUNNING:
+        queue_door_motion(DOOR_START_OPEN);
+        break;
+    case DOOR_START_CLOSE:
+    case DOOR_CLOSE_RUNNING:
+        door_phase = DOOR_WAIT_PLATFORM;
+        /* fall through */
+    case DOOR_WAIT_PLATFORM:
+        motor_control_request_platform_retract();
+        break;
+    default:
+        break;
+    }
+    switch (platform_phase) {
+    case PLATFORM_START_RETRACT:
+    case PLATFORM_RETRACT_RUNNING:
+        queue_platform_motion(PLATFORM_START_RETRACT);
+        break;
+    case PLATFORM_START_EXTEND:
+    case PLATFORM_EXTEND_RUNNING:
+        platform_phase = PLATFORM_WAIT_DOOR;
+        /* fall through */
+    case PLATFORM_WAIT_DOOR:
+        motor_control_request_door_open();
+        break;
+    default:
+        break;
+    }
+}
+
+void motor_control_toggle_door(void)
+{
+    bool open;
+
+    if (enforce_limit_stop() || estop_active) return;
+    if (key_owner == KEY_OWNER_DOOR) {
+        toggle_motion_pause();
+        return;
+    }
+    switch (door_phase) {
+    case DOOR_START_OPEN:
+    case DOOR_OPEN_RUNNING:
+    case DOOR_REVERSE_TO_OPEN:
+        open = false;
+        break;
+    case DOOR_WAIT_PLATFORM:
+    case DOOR_START_CLOSE:
+    case DOOR_CLOSE_RUNNING:
+    case DOOR_REVERSE_TO_CLOSE:
+        open = true;
+        break;
+    default:
+        open = motor_status.door_position == MOTOR_DOOR_CLOSED;
+        break;
+    }
+    if (motion_paused) toggle_motion_pause();
+    key_owner = KEY_OWNER_DOOR;
+    if (open) motor_control_request_door_open();
+    else motor_control_request_door_close();
+}
+
 void motor_control_toggle_platform(void)
 {
+    bool extend;
+
     if (enforce_limit_stop() || estop_active) return;
+    if (key_owner == KEY_OWNER_PLATFORM) {
+        toggle_motion_pause();
+        return;
+    }
     switch (platform_phase) {
     case PLATFORM_START_RETRACT:
     case PLATFORM_RETRACT_RUNNING:
     case PLATFORM_REVERSE_TO_RETRACT:
-        motor_control_request_platform_extend();
+        extend = true;
         break;
     case PLATFORM_WAIT_DOOR:
     case PLATFORM_START_EXTEND:
     case PLATFORM_EXTEND_RUNNING:
     case PLATFORM_REVERSE_TO_EXTEND:
-        motor_control_request_platform_retract();
+        extend = false;
         break;
     default:
-        if (motor_status.platform_position == MOTOR_PLATFORM_EXTENDED) motor_control_request_platform_retract();
-        else motor_control_request_platform_extend();
+        extend = motor_status.platform_position == MOTOR_PLATFORM_RETRACTED;
         break;
     }
+    if (motion_paused) toggle_motion_pause();
+    key_owner = KEY_OWNER_PLATFORM;
+    if (extend) motor_control_request_platform_extend();
+    else motor_control_request_platform_retract();
 }
 
 static bool platform_extend_allowed(void)
@@ -380,6 +480,12 @@ static void update_platform(void)
             stop_platform_motion();
             break;
         }
+        if (!retract && !platform_extend_allowed()) {
+            halt_platform_motion();
+            platform_phase = PLATFORM_WAIT_DOOR;
+            motor_control_request_door_open();
+            break;
+        }
         if (platform_phase == PLATFORM_RETRACT_RUNNING || platform_phase == PLATFORM_EXTEND_RUNNING) break;
         started = motor_driver_start(MOTOR_PLATFORM, retract ? MOTOR_DIR_BACKWARD : MOTOR_DIR_FORWARD);
         if (started) {
@@ -389,7 +495,7 @@ static void update_platform(void)
         } else {
             (void)motor_driver_stop(MOTOR_PLATFORM);
             if (++platform_start_failures >= 3U) {
-                stop_platform_motion();
+                cancel_all_motion();
                 motor_status.platform_fault |= MOTOR_FAULT_START_FAILED;
             }
         }
@@ -403,8 +509,9 @@ static void update_platform(void)
 
 void motor_control_update(void)
 {
-    if (enforce_limit_stop() || estop_active) return;
+    if (enforce_limit_stop() || estop_active || motion_paused) return;
     /* 门先推进，平台在同一周期读取门的最新阶段。 */
     update_door();
     update_platform();
+    if (door_phase == DOOR_IDLE && platform_phase == PLATFORM_IDLE) key_owner = KEY_OWNER_NONE;
 }

@@ -180,6 +180,13 @@ static void iec104_handle_single_command(const iec104_frame_t *frame, uint32_t n
         return;
     }
 
+    if (!iec104_app_remote_control_allowed(ioa)) {
+        selected_command.selected = 0U;
+        (void)iec104_send_command_response(frame,
+            (selecting ? IEC104_COT_ACTCON : IEC104_COT_ACTTERM) | IEC104_COT_NEGATIVE, now);
+        return;
+    }
+
     /* 选择报文只有在 ACTCON 成功入队后才生效。 */
     if (selecting != 0U) {
         DEBUG("APP", "IEC104 YK id=0x%06lX start value=%u select=1\n", (unsigned long)ioa, (unsigned)value);

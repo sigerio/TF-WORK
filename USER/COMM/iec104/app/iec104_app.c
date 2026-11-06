@@ -446,9 +446,21 @@ uint8_t iec104_app_remote_control_is_known(uint32_t ioa)
     return 0U;
 }
 
+uint8_t iec104_app_remote_control_allowed(uint32_t ioa)
+{
+    if (ioa == IEC104_IOA_YK_DOOR_OPEN || ioa == IEC104_IOA_YK_DOOR_CLOSE ||
+        ioa == IEC104_IOA_YK_HELIPED_EXTEND || ioa == IEC104_IOA_YK_HELIPED_RETRACT) {
+        motor_control_status_t status;
+        motor_control_get_status(&status);
+        return !status.key_control_active;
+    }
+    return 1U;
+}
+
 void iec104_app_remote_control_execute(uint32_t ioa)
 {
     const iec104_command_desc_t *command = iec104_command_find(ioa);
+    if (!iec104_app_remote_control_allowed(ioa)) return;
     if (ioa >= 0x230U && ioa <= 0x238U) {
         static const modbus_dev_type_t devices[] = { MODBUS_DEV_MACHINE_EXTEND, MODBUS_DEV_POLE_RAISE, MODBUS_DEV_SOLAR_UNFOLD };
         static const wanrong_command_e commands[] = { WANRONG_FORWARD, WANRONG_REVERSE, WANRONG_STOP };

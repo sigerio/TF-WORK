@@ -5,7 +5,7 @@
 
 static void key_platform_short_event(void)
 {
-    /* 短按切换停机坪伸出/缩回，方向由 business 内部依当前状态判定 */
+    /* 短按由控制层处理目标切换及整套联动暂停/继续 */
     motor_control_toggle_platform();
 }
 
@@ -20,7 +20,7 @@ static void key_platform_long_repeat_event(void)
 
 static void key_door_short_event(void)
 {
-    /* 短按切换门开启/关闭，方向由 business 内部依当前状态判定 */
+    /* 短按由控制层处理目标切换及整套联动暂停/继续 */
     motor_control_toggle_door();
 }
 

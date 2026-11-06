@@ -46,6 +46,8 @@ typedef struct {
     motor_platform_position_e platform_position;
     motor_platform_action_e platform_action;
     motor_fault_e platform_fault;
+    bool key_control_active; /* 含联动等待及暂停；104 不得接管门/平台。 */
+    bool paused;
 } motor_control_status_t;
 
 /* 初始化板级输入/锁和单电机驱动，建立门/平台状态。 */
@@ -54,6 +56,7 @@ void motor_control_request_door_open(void);
 void motor_control_request_door_close(void);
 void motor_control_request_platform_extend(void);
 void motor_control_request_platform_retract(void);
+/* 发起键短按暂停/继续整套流程；另一键提交新目标，中间位置默认关门/收平台。 */
 void motor_control_toggle_door(void);
 void motor_control_toggle_platform(void);
 /* 急停取消两机构的全部请求；释放不续跑。 */
