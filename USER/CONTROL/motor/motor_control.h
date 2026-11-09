@@ -48,10 +48,13 @@ typedef struct {
     motor_fault_e platform_fault;
     bool key_control_active; /* 含联动等待及暂停；104 不得接管门/平台。 */
     bool paused;
+    bool test_mode; /* 仅取消门/平台联动与位置互锁；上电默认关闭。 */
 } motor_control_status_t;
 
 /* 初始化板级输入/锁和单电机驱动，建立门/平台状态。 */
 void motor_control_init(void);
+/* 实际切换模式时停止全部电机并清除意图；重复设置当前模式无动作。 */
+void motor_control_set_test_mode(bool enabled);
 void motor_control_request_door_open(void);
 void motor_control_request_door_close(void);
 void motor_control_request_platform_extend(void);

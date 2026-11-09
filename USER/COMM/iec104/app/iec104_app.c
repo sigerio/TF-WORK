@@ -235,6 +235,7 @@ static void iec104_app_fill_status_points(const iec104_app_snapshot_t *snapshot,
     const uint8_t coil_values[MT80_COIL_COUNT] = { mt80->clear_energy, mt80->fault_reset,
         mt80->inverter_output, mt80->remote_control, mt80->dc_output };
     uint8_t point = 39U;
+    points[75] = (iec104_status_point_t){ IEC104_IOA_YX_MOTOR_TEST_MODE, run_status->test_mode, 0U };
     for (uint8_t i = 0U; i < MT80_COIL_COUNT; i++) {
         points[33U + i] = (iec104_status_point_t){ 0x011000UL + mt80_coils[i], coil_values[i],
             iec104_status_quality(mt80->status.online && (mt80->coil_valid & (1U << i)), 0U) };
@@ -438,6 +439,7 @@ static const iec104_command_desc_t *iec104_command_find(uint32_t ioa)
 
 uint8_t iec104_app_remote_control_is_known(uint32_t ioa)
 {
+    if (ioa == IEC104_IOA_YK_MOTOR_TEST_ENTER || ioa == IEC104_IOA_YK_MOTOR_TEST_EXIT) return 1U;
     if (iec104_command_find(ioa) != NULL || (ioa >= 0x230U && ioa <= 0x238U) || ioa == 0x240U || ioa == 0x241U) return 1U;
     for (uint8_t i = 0U; i < MT80_COIL_COUNT; i++) {
         uint32_t on_ioa = 0x300UL + 2UL * mt80_coils[i];
@@ -461,6 +463,10 @@ void iec104_app_remote_control_execute(uint32_t ioa)
 {
     const iec104_command_desc_t *command = iec104_command_find(ioa);
     if (!iec104_app_remote_control_allowed(ioa)) return;
+    if (ioa == IEC104_IOA_YK_MOTOR_TEST_ENTER || ioa == IEC104_IOA_YK_MOTOR_TEST_EXIT) {
+        motor_control_set_test_mode(ioa == IEC104_IOA_YK_MOTOR_TEST_ENTER);
+        return;
+    }
     if (ioa >= 0x230U && ioa <= 0x238U) {
         static const modbus_dev_type_t devices[] = { MODBUS_DEV_MACHINE_EXTEND, MODBUS_DEV_POLE_RAISE, MODBUS_DEV_SOLAR_UNFOLD };
         static const wanrong_command_e commands[] = { WANRONG_FORWARD, WANRONG_REVERSE, WANRONG_STOP };

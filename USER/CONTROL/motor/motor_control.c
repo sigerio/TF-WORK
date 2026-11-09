@@ -120,6 +120,14 @@ static void cancel_all_motion(void)
     motion_paused = false;
 }
 
+void motor_control_set_test_mode(bool enabled)
+{
+    if (motor_status.test_mode == enabled) return;
+    read_positions_and_faults();
+    cancel_all_motion();
+    motor_status.test_mode = enabled;
+}
+
 /* 命令与周期共用保护入口：故障出现/恢复都取消旧请求，查询接口不做这些操作。 */
 static bool enforce_limit_stop(void)
 {
@@ -131,8 +139,9 @@ static bool enforce_limit_stop(void)
     if (was_fault || fault) {
         cancel_all_motion();
     }
-    if ((motor_status.door_action == MOTOR_DOOR_CLOSING && motor_status.platform_position != MOTOR_PLATFORM_RETRACTED) ||
-        (motor_status.platform_action == MOTOR_PLATFORM_EXTENDING && motor_status.door_position != MOTOR_DOOR_OPENED)) {
+    if (!motor_status.test_mode &&
+        ((motor_status.door_action == MOTOR_DOOR_CLOSING && motor_status.platform_position != MOTOR_PLATFORM_RETRACTED) ||
+         (motor_status.platform_action == MOTOR_PLATFORM_EXTENDING && motor_status.door_position != MOTOR_DOOR_OPENED))) {
         cancel_all_motion();
         return true;
     }
@@ -209,7 +218,7 @@ void motor_control_request_door_close(void)
     if (door_phase == DOOR_WAIT_PLATFORM || door_phase == DOOR_START_CLOSE ||
         door_phase == DOOR_CLOSE_RUNNING || door_phase == DOOR_REVERSE_TO_CLOSE) return;
 
-    motor_control_request_platform_retract();
+    if (!motor_status.test_mode) motor_control_request_platform_retract();
     switch (door_phase) {
     case DOOR_START_OPEN:
     case DOOR_OPEN_RUNNING:
@@ -220,13 +229,15 @@ void motor_control_request_door_close(void)
         door_phase = DOOR_REVERSE_TO_CLOSE;
         break;
     default:
-        door_phase = DOOR_WAIT_PLATFORM;
+        if (motor_status.test_mode) queue_door_motion(DOOR_START_CLOSE);
+        else door_phase = DOOR_WAIT_PLATFORM;
         break;
     }
 }
 
 static bool door_close_allowed(void)
 {
+    if (motor_status.test_mode) return true;
     return motor_status.platform_fault == MOTOR_FAULT_NONE && motor_status.platform_position == MOTOR_PLATFORM_RETRACTED &&
         (platform_phase == PLATFORM_IDLE || platform_phase == PLATFORM_START_RETRACT || platform_phase == PLATFORM_RETRACT_RUNNING);
 }
@@ -326,7 +337,7 @@ void motor_control_request_platform_extend(void)
     if (platform_phase == PLATFORM_WAIT_DOOR || platform_phase == PLATFORM_START_EXTEND ||
         platform_phase == PLATFORM_EXTEND_RUNNING || platform_phase == PLATFORM_REVERSE_TO_EXTEND) return;
 
-    motor_control_request_door_open();
+    if (!motor_status.test_mode) motor_control_request_door_open();
     switch (platform_phase) {
     case PLATFORM_START_RETRACT:
     case PLATFORM_RETRACT_RUNNING:
@@ -337,7 +348,8 @@ void motor_control_request_platform_extend(void)
         platform_phase = PLATFORM_REVERSE_TO_EXTEND;
         break;
     default:
-        platform_phase = PLATFORM_WAIT_DOOR;
+        if (motor_status.test_mode) queue_platform_motion(PLATFORM_START_EXTEND);
+        else platform_phase = PLATFORM_WAIT_DOOR;
         break;
     }
 }
@@ -360,10 +372,13 @@ static void toggle_motion_pause(void)
         break;
     case DOOR_START_CLOSE:
     case DOOR_CLOSE_RUNNING:
-        door_phase = DOOR_WAIT_PLATFORM;
-        /* fall through */
     case DOOR_WAIT_PLATFORM:
-        motor_control_request_platform_retract();
+        if (motor_status.test_mode) {
+            queue_door_motion(DOOR_START_CLOSE);
+        } else {
+            door_phase = DOOR_WAIT_PLATFORM;
+            motor_control_request_platform_retract();
+        }
         break;
     default:
         break;
@@ -375,10 +390,13 @@ static void toggle_motion_pause(void)
         break;
     case PLATFORM_START_EXTEND:
     case PLATFORM_EXTEND_RUNNING:
-        platform_phase = PLATFORM_WAIT_DOOR;
-        /* fall through */
     case PLATFORM_WAIT_DOOR:
-        motor_control_request_door_open();
+        if (motor_status.test_mode) {
+            queue_platform_motion(PLATFORM_START_EXTEND);
+        } else {
+            platform_phase = PLATFORM_WAIT_DOOR;
+            motor_control_request_door_open();
+        }
         break;
     default:
         break;
@@ -449,6 +467,7 @@ void motor_control_toggle_platform(void)
 
 static bool platform_extend_allowed(void)
 {
+    if (motor_status.test_mode) return true;
     return motor_status.door_fault == MOTOR_FAULT_NONE && motor_status.door_position == MOTOR_DOOR_OPENED &&
         (door_phase == DOOR_IDLE || door_phase == DOOR_START_OPEN || door_phase == DOOR_OPEN_RUNNING);
 }
