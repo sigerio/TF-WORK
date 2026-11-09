@@ -1,0 +1,5 @@
+/.agents/
+/.codex/
+/.aws/
+/*.hex
+**/MDK/*_build.log
